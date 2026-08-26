@@ -1,0 +1,32 @@
+{
+  "name": "VERS v5.0 Cloud Environment",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.testing.pytestEnabled": true
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  },
+  "forwardPorts": [5173, 8000],
+  "portsAttributes": {
+    "5173": {
+      "label": "VERS Command Center",
+      "onAutoForward": "openBrowser"
+    },
+    "8000": {
+      "label": "FastAPI WebSocket Backend",
+      "onAutoForward": "silent"
+    }
+  },
+  "postCreateCommand": "bash run.sh --install-only",
+  "postStartCommand": "bash run.sh"
+}
