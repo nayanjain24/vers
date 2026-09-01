@@ -176,21 +176,26 @@ def _is_pointing_down(pts: np.ndarray) -> bool:
 
 
 def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, float]:
-    """Classify using comprehensive 3D finger-extension & spatial geometry."""
+    """Classify using comprehensive 3D finger-extension & spatial geometry.
+    
+    Strict Mutual Exclusivity:
+    - If use_sign_mode is False (EMERGENCY MODE): Detects ONLY Emergency signs. Conversational signs are OFF.
+    - If use_sign_mode is True (CONVERSATIONAL MODE): Detects ONLY Conversational signs. Emergency signs are OFF.
+    """
     pts = v.reshape(21, 3)
 
     if np.linalg.norm(pts) < 1e-5:
         return ("YES" if use_sign_mode else "ACCIDENT"), 1.0
 
-    # Downward fall check
+    # Downward fall check -> Emergency only
     if _is_pointing_down(pts):
-        return "FALL", 1.0
+        return ("NONE" if use_sign_mode else "FALL"), 1.0
 
-    # Pinch / Flat-O check (FOOD / MORE)
+    # Pinch / Flat-O check (FOOD / MORE) -> Conversational only
     if _is_pinch_flat_o(pts):
-        return ("FOOD" if use_sign_mode else "PAIN"), 1.0
+        return ("FOOD" if use_sign_mode else "NONE"), 1.0
 
-    # Claw check (PAIN / WANT)
+    # Claw check (PAIN in emergency, WANT in conversational)
     if _is_claw_shape(pts):
         return ("WANT" if use_sign_mode else "PAIN"), 1.0
 
@@ -200,18 +205,17 @@ def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, 
     r = _is_finger_extended(pts, 16, 14, 13)
     p = _is_finger_extended(pts, 20, 18, 17)
 
-    # 1. 5 Fingers Spread / Open Hand (SOS / HELP / HELLO / STOP / PLEASE / THANK_YOU)
+    # 1. 5 Fingers Spread / Open Hand
     if t and i and m and r and p:
-        # Check finger tightness for STOP (in real camera input with non-synthetic coordinates)
         spread = np.linalg.norm(pts[8] - pts[20])
         dist_tip_wrist = np.linalg.norm(pts[8] - pts[0])
         if 0.0 < spread < 0.45 and dist_tip_wrist < 2.0:
             return ("PLEASE" if use_sign_mode else "STOP"), 1.0
         return ("HELLO" if use_sign_mode else "SOS"), 1.0
 
-    # 2. 4 Fingers Extended (Index, Mid, Rng, Pnk with thumb folded)
+    # 2. 4 Fingers Extended (Index, Mid, Rng, Pnk with thumb folded) -> MEDICAL (Emergency only)
     if not t and i and m and r and p:
-        return "MEDICAL", 1.0
+        return ("NONE" if use_sign_mode else "MEDICAL"), 1.0
 
     # 3. 3 Fingers Extended (Index, Mid, Rng with thumb and pinky folded - W shape)
     if not t and i and m and r and not p:
@@ -223,13 +227,10 @@ def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, 
 
     # 4. 2 Fingers in V-shape (Index + Middle extended)
     if not t and i and m and not r and not p:
-        return ("POLICE" if use_sign_mode else "EMERGENCY"), 1.0
-
-    # 2 Fingers together horizontally (NAME / NO)
-    if not t and i and m and not r and not p:
         spread_im = np.linalg.norm(pts[8] - pts[12])
-        if spread_im < 0.25:
-            return ("NAME" if use_sign_mode else "POLICE"), 1.0
+        if spread_im < 0.25 and use_sign_mode:
+            return "NAME", 1.0
+        return ("NO" if use_sign_mode else "POLICE"), 1.0
 
     # 5. 1 Finger Up (Index finger extended alone)
     if not t and i and not m and not r and not p:
@@ -239,7 +240,7 @@ def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, 
     if t and i and not m and not r and not p:
         return ("UNDERSTAND" if use_sign_mode else "FIRE"), 1.0
 
-    # 6. Thumb Up / Fist with thumb extended (SAFE / GOOD)
+    # 6. Thumb Up / Fist with thumb extended (SAFE in emergency, GOOD in conversational)
     if t and not i and not m and not r and not p:
         wrist_y = pts[0][1]
         thumb_y = pts[4][1]
@@ -247,9 +248,9 @@ def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, 
             return ("BAD" if use_sign_mode else "DANGER"), 1.0
         return ("GOOD" if use_sign_mode else "SAFE"), 1.0
 
-    # 7. Thumb + Pinky Extended (Y-shape / Phone)
+    # 7. Thumb + Pinky Extended (Y-shape / Phone) -> Conversational only
     if t and not i and not m and not r and p:
-        return "PHONE", 1.0
+        return ("PHONE" if use_sign_mode else "NONE"), 1.0
 
     # 8. Index + Pinky Extended (Horns / ILY sign / FRIEND / EMERGENCY)
     if not t and i and not m and not r and p:
@@ -259,19 +260,19 @@ def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, 
     if t and i and not m and not r and p:
         return ("FRIEND" if use_sign_mode else "EMERGENCY"), 1.0
 
-    # 9. Pinky Only Extended
+    # 9. Pinky Only Extended -> Conversational FRIEND only
     if not t and not i and not m and not r and p:
-        return "FRIEND", 1.0
+        return ("FRIEND" if use_sign_mode else "NONE"), 1.0
 
-    # 10. Thumb + Index + Middle Extended
+    # 10. Thumb + Index + Middle Extended -> Conversational FOOD only
     if t and i and m and not r and not p:
-        return "FOOD", 1.0
+        return ("FOOD" if use_sign_mode else "NONE"), 1.0
 
-    # 11. Middle + Ring + Pinky Extended
+    # 11. Middle + Ring + Pinky Extended -> Conversational WANT only
     if not t and not i and m and r and p:
-        return "WANT", 1.0
+        return ("WANT" if use_sign_mode else "NONE"), 1.0
 
-    # 12. Solid Fist (All fingers folded) -> ACCIDENT / YES / SORRY
+    # 12. Solid Fist (All fingers folded) -> ACCIDENT in emergency, YES in conversational
     if not t and not i and not m and not r and not p:
         return ("YES" if use_sign_mode else "ACCIDENT"), 1.0
 

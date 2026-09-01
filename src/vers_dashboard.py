@@ -228,79 +228,62 @@ class DashboardRuntime:
         self._frame_counter += 1
         frame_counter = self._frame_counter
 
-        # --- 1. HAND GESTURE TRACKING (Dual-Tier: Emergency Primary, Conversational Secondary) ---
+        # --- 1. HAND GESTURE TRACKING ---
         hand_results = self._hands.process(rgb)
         hand_vector = extract_hand_vector(hand_results)
 
         raw_label, raw_conf = "NONE", 0.0
-        primary_em_label, secondary_conv_label = "NONE", "NONE"
         if hand_vector is not None:
-            from src.vision.gesture_tracker import predict_dual_tier_sign
-            dual_result = predict_dual_tier_sign(hand_vector)
-            primary_em_label = dual_result["primary_emergency"]
-            secondary_conv_label = dual_result["secondary_conversational"]
+            raw_label, raw_conf = predict_gesture(hand_vector, use_sign_mode=use_sign_mode)
 
             if use_sign_mode:
-                # If conversational mode is ON: evaluate both, giving emergency precedence
-                raw_label = dual_result["active_label"]
-                raw_conf = dual_result["active_conf"]
+                # CONVERSATIONAL MODE: ONLY Conversational Signs allowed. Emergency is OFF.
+                CONVERSATIONAL_WHITELIST = {
+                    "HELLO", "THANK_YOU", "PLEASE", "YES", "NO", "WATER", "FOOD", "WANT", 
+                    "MORE", "FRIEND", "FAMILY", "NAME", "GOOD", "BAD", "SORRY", "UNDERSTAND", 
+                    "PHONE", "WHERE", "FINISHED"
+                }
+                if raw_label not in CONVERSATIONAL_WHITELIST:
+                    raw_label, raw_conf = "NONE", 0.0
             else:
-                # If strict emergency mode is ON: only pass emergency signs
-                raw_label = dual_result["primary_emergency"]
-                raw_conf = dual_result["emergency_conf"]
+                # EMERGENCY MODE: ONLY Emergency Signs allowed. Conversational is OFF.
+                EMERGENCY_WHITELIST = {
+                    "HELP", "SOS", "MEDICAL", "FIRE", "POLICE", "AMBULANCE",
+                    "ACCIDENT", "DANGER", "PAIN", "FALL", "STOP", "SAFE", "EMERGENCY"
+                }
+                if raw_label not in EMERGENCY_WHITELIST:
+                    raw_label, raw_conf = "NONE", 0.0
 
             self._sign_buffer.push(hand_vector)
 
         self._smoother.push(raw_label, raw_conf)
         smooth_label, smooth_conf = self._smoother.smoothed()
 
-        # --- 2. SIGN LANGUAGE RECOGNITION (v4.0 / v5.0) ---
+        # --- 2. SIGN LANGUAGE RECOGNITION ---
         sign_word = "NONE"
         sign_conf = 0.0
         if use_sign_mode:
-            SIGN_WHITELIST = {
+            CONVERSATIONAL_WHITELIST = {
                 "HELLO", "THANK_YOU", "PLEASE", "YES", "NO", "WATER", "FOOD", "WANT", 
                 "MORE", "FRIEND", "FAMILY", "NAME", "GOOD", "BAD", "SORRY", "UNDERSTAND", 
-                "PHONE", "WHERE", "FINISHED", "HELP", "STOP", "ACCIDENT", "MEDICAL", 
-                "FIRE", "POLICE", "AMBULANCE", "DANGER", "PAIN", "FALL", "SAFE", "EMERGENCY"
+                "PHONE", "WHERE", "FINISHED"
             }
             if self._sign_recognizer.available and self._sign_buffer.ready:
                 lstm_word, lstm_conf = self._sign_recognizer.predict(self._sign_buffer.get_tensor())
-                if lstm_word in SIGN_WHITELIST and lstm_conf >= 0.55:
+                if lstm_word in CONVERSATIONAL_WHITELIST and lstm_conf >= 0.55:
                     sign_word, sign_conf = lstm_word, lstm_conf
 
-            if sign_word == "NONE" and smooth_label in SIGN_WHITELIST and smooth_conf >= 0.4:
+            if sign_word == "NONE" and smooth_label in CONVERSATIONAL_WHITELIST and smooth_conf >= 0.4:
                 sign_word = smooth_label
                 sign_conf = smooth_conf
 
             if sign_word != "NONE":
-                intent = self._intent_mapper.push_word(sign_word)
-                if intent is not None and intent.is_emergency:
-                    sl_payload = dispatch_alert(
-                        gesture_label=intent.alert_type,
-                        gesture_confidence=sign_conf,
-                        dominant_emotion=self._cached_emotion.get("dominant_emotion", "neutral"),
-                        emotion_distress=self._cached_emotion.get("distress_contribution", 0.0),
-                        severity_score=sign_conf,
-                        threat_level=intent.severity,
-                        distress_flag=False,
-                        enable_tts=True,
-                    )
-                    if sl_payload is not None:
-                        with self._lock:
-                            self._append_alert(sl_payload)
+                self._intent_mapper.push_word(sign_word)
 
         # Unify active gesture across modes
         if use_sign_mode:
-            if sign_word != "NONE":
-                active_gesture = sign_word
-                active_confidence = sign_conf
-            elif smooth_label != "NONE":
-                active_gesture = smooth_label
-                active_confidence = smooth_conf
-            else:
-                active_gesture = "NONE"
-                active_confidence = 0.0
+            active_gesture = sign_word if sign_word != "NONE" else smooth_label
+            active_confidence = sign_conf if sign_word != "NONE" else smooth_conf
         else:
             active_gesture = smooth_label
             active_confidence = smooth_conf
@@ -342,9 +325,9 @@ class DashboardRuntime:
 
         distress_flag = smart_result.urgency_score > distress_threshold
 
-        # --- 5. ALERT DISPATCH ---
+        # --- 5. ALERT DISPATCH (Emergency Mode Only) ---
         payload = None
-        if smart_result.gesture_label != "NONE" and smart_result.gesture_confidence >= 0.5:
+        if not use_sign_mode and smart_result.gesture_label != "NONE" and smart_result.gesture_confidence >= 0.5:
             if smart_result.context_mode == "EMERGENCY" or smart_result.urgency_score > 0.4:
                 payload = dispatch_alert(
                     gesture_label=smart_result.gesture_label,
