@@ -391,50 +391,6 @@ export default function App() {
           /* CONVERSATIONAL SIGN MODE VIEW                                */
           /* ============================================================ */
           <div className="flex flex-col gap-4">
-            {/* Live Sentence Builder & Real-time Translation */}
-            <div className="glass-panel p-4 sentence-builder-panel">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={18} className="text-accent-purple" />
-                  <span className="font-semibold">Live Sign-to-Speech Sentence Translator</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    className="action-pill-btn btn-speak"
-                    onClick={speakCurrentSentence}
-                    disabled={sentenceWords.length === 0}
-                    title="Speak whole sentence aloud"
-                  >
-                    <Volume2 size={14} /> Speak Sentence
-                  </button>
-                  <button 
-                    className="action-pill-btn btn-clear"
-                    onClick={clearSentence}
-                    disabled={sentenceWords.length === 0}
-                    title="Clear sentence"
-                  >
-                    <Trash2 size={14} /> Clear
-                  </button>
-                </div>
-              </div>
-
-              <div className="sentence-display-box">
-                {sentenceWords.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 items-center">
-                    {sentenceWords.map((w, idx) => (
-                      <span key={idx} className="sentence-word-pill">
-                        {w}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <span className="text-text-muted italic text-sm">
-                    Perform conversational sign gestures in front of the camera (or click signs below) to form a sentence...
-                  </span>
-                )}
-              </div>
-            </div>
-
             {/* Conversational Telemetry Cards */}
             <div className="telemetry-grid">
               <div className="glass-panel stat-card">
