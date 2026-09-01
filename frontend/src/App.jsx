@@ -176,13 +176,26 @@ export default function App() {
     lastSpokenWordRef.current = null;
   };
 
-  // Full System Reset Handler
+  // Full System Reset Handler (Wipes & Clears EVERYTHING)
   const handleSystemReset = async () => {
     try {
       setIsResetting(true);
-      const host = window.location.hostname || 'localhost';
-      await fetch(`http://${host}:8000/api/v1/reset`, { method: 'POST' });
+      
+      // 1. Stop Camera & Wipe Video Feed
+      stopBrowserCamera();
+      setFrame(null);
+
+      // 2. Clear all local alerts, sentence words, history, and UI states
       setAlerts([]);
+      setSentenceWords([]);
+      setConversationHistory([]);
+      lastSpokenWordRef.current = null;
+      setLastTriggered(null);
+      setShowGlossary(false);
+      setSearchQuery('');
+      setAppMode('emergency');
+
+      // 3. Reset all telemetry meters to absolute zero
       setTelemetry({
         fps: 0,
         gesture: 'NONE',
@@ -193,10 +206,17 @@ export default function App() {
         sign_word: '',
         sign_buffer_words: []
       });
+
+      // 4. Cancel any ongoing TTS speech immediately
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
-      setTimeout(() => setIsResetting(false), 800);
+
+      // 5. Signal backend to flush all logs, AI buffers, smoothers & metrics
+      const host = window.location.hostname || 'localhost';
+      await fetch(`http://${host}:8000/api/v1/reset`, { method: 'POST' });
+
+      setTimeout(() => setIsResetting(false), 600);
     } catch (err) {
       console.error("System reset failed:", err);
       setIsResetting(false);

@@ -172,7 +172,22 @@ class DashboardRuntime:
             self._status["confidence"] = 0.0
             self._status["distress_score"] = 0.0
             self._status["distress_flag"] = False
+            self._status["threat_level"] = "NONE"
             self._status["fps"] = 0.0
+            self._frame = None
+            if hasattr(self, "_smoother"):
+                self._smoother.clear()
+            if hasattr(self, "_sign_buffer"):
+                self._sign_buffer.clear()
+            if hasattr(self, "_intent_mapper"):
+                self._intent_mapper = IntentMapper(memory_size=5)
+            if hasattr(self, "_cached_emotion"):
+                self._cached_emotion = {
+                    "dominant_emotion": "neutral",
+                    "emotion_scores": {},
+                    "distress_contribution": 0.0,
+                }
+            self._cached_face_lms = None
 
     def _append_alert(self, payload: dict[str, Any]) -> None:
         self._alerts.appendleft(payload)
