@@ -268,16 +268,18 @@ export default function App() {
             title="Open Sign Language Dictionary"
           >
             <BookOpen size={16} />
-            Sign Language Glossary ({NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length} Signs)
+            Glossary ({NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length} Signs)
           </button>
 
+          {/* Explicit Normal Sign Language ON/OFF Toggle */}
           <button 
-            className={`control-btn ${signMode ? 'active' : ''}`}
+            className={`control-btn ${signMode ? 'active-green' : 'active-orange'}`}
             onClick={() => setSignMode(!signMode)}
-            title="Toggle between All 30+ Signs vs Strict Emergency Only"
+            title="Turn Normal Conversational Sign Language ON or OFF"
+            id="toggle-normal-signs"
           >
             <Sparkles size={16} />
-            {signMode ? 'Mode: All Signs (Normal + Emergency)' : 'Mode: Strict Emergency Only'}
+            <span>Normal Signs: <strong>{signMode ? 'ON' : 'OFF'}</strong></span>
           </button>
 
           <button 
@@ -285,7 +287,7 @@ export default function App() {
             onClick={browserCamActive ? stopBrowserCamera : startBrowserCamera}
           >
             {browserCamActive ? <VideoOff size={16} /> : <Video size={16} />}
-            {browserCamActive ? 'Stop Browser Camera' : 'Start Browser Camera'}
+            {browserCamActive ? 'Stop Camera' : 'Start Camera'}
           </button>
 
           <button 
@@ -315,7 +317,7 @@ export default function App() {
                 <Video size={48} opacity={0.4} />
                 <p className="font-semibold text-lg">Live AI Gesture & Sign Feed</p>
                 <p className="text-sm text-text-muted max-w-md text-center">
-                  Click <strong>Start Browser Camera</strong> to stream your webcam directly through the MediaPipe AI gesture recognizer and distress model.
+                  Click <strong>Start Camera</strong> to stream your webcam directly through the MediaPipe AI gesture recognizer and distress model.
                 </p>
                 <button className="primary-action-btn" onClick={startBrowserCamera}>
                   <Video size={18} /> Enable Camera Now
@@ -324,7 +326,7 @@ export default function App() {
             )}
             {frame && (
               <div className="camera-overlay-stats">
-                FPS: {telemetry.fps > 0 ? telemetry.fps.toFixed(1) : '19.2'} | Latency: ~38ms
+                FPS: {telemetry.fps > 0 ? telemetry.fps.toFixed(1) : '20.0'} | Mode: {signMode ? 'Normal + Emergency' : 'Emergency Only'}
               </div>
             )}
           </div>
@@ -369,31 +371,54 @@ export default function App() {
           </div>
         </div>
 
-        {/* Normal Sign Language Quick Simulator */}
-        <div className="glass-panel trigger-panel">
+        {/* Normal Sign Language Quick Simulator & ON/OFF Controls */}
+        <div className={`glass-panel trigger-panel ${!signMode ? 'panel-disabled' : ''}`}>
           <div className="trigger-header">
             <div className="flex items-center gap-2">
               <MessageSquare size={18} className="text-accent-purple" />
-              <span className="font-semibold">Normal Conversational Sign Language Quick Test</span>
+              <span className="font-semibold">Normal Conversational Sign Language</span>
+              <span className={`mode-pill ${signMode ? 'pill-on' : 'pill-off'}`}>
+                {signMode ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}
+              </span>
             </div>
-            <button className="text-xs text-accent-blue underline cursor-pointer bg-transparent border-none" onClick={() => setShowGlossary(true)}>
-              View All {NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length} Signs & Geometries →
-            </button>
+            
+            <div className="flex items-center gap-2">
+              <button 
+                className={`toggle-switch-btn ${signMode ? 'btn-active-on' : 'btn-active-off'}`}
+                onClick={() => setSignMode(!signMode)}
+                title="Click to turn Normal Sign Language ON or OFF"
+              >
+                {signMode ? 'Turn OFF Normal Signs' : 'Turn ON Normal Signs'}
+              </button>
+
+              <button className="text-xs text-accent-blue underline cursor-pointer bg-transparent border-none" onClick={() => setShowGlossary(true)}>
+                View All {NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length} Signs →
+              </button>
+            </div>
           </div>
 
-          <div className="normal-signs-grid">
-            {NORMAL_SIGNS.slice(0, 10).map((sign) => (
-              <button 
-                key={sign.word}
-                className={`normal-sign-btn ${lastTriggered === sign.word ? 'triggered' : ''}`}
-                onClick={() => triggerTestAlert(sign.word, 'Low')}
-                title={sign.gesture}
-              >
-                <span className="sign-word">{sign.word}</span>
-                <span className="sign-meaning">{sign.meaning}</span>
+          {!signMode ? (
+            <div className="disabled-banner">
+              <span>⚠️ Normal Sign Language is currently <strong>TURNED OFF</strong>. The AI is filtering for <strong>Emergency Signals Only</strong>.</span>
+              <button className="turn-on-btn" onClick={() => setSignMode(true)}>
+                ⚡ Click to Turn Normal Sign Language ON
               </button>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="normal-signs-grid">
+              {NORMAL_SIGNS.map((sign) => (
+                <button 
+                  key={sign.word}
+                  className={`normal-sign-btn ${sign.word === 'NO' ? 'btn-no-highlight' : ''} ${lastTriggered === sign.word ? 'triggered' : ''}`}
+                  onClick={() => triggerTestAlert(sign.word, 'Low')}
+                  title={sign.gesture}
+                >
+                  <span className="sign-word">{sign.word}</span>
+                  <span className="sign-meaning">{sign.meaning}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Emergency Simulator */}
