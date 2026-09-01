@@ -87,8 +87,53 @@ export default function App() {
   const ws = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  const sendIntervalRef = useRef(null);
+  const [appMode, setAppMode] = useState('emergency'); // 'emergency' | 'conversation'
+  const [sentenceWords, setSentenceWords] = useState([]);
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const lastSpokenWordRef = useRef(null);
+
+  // Sync signMode with appMode
+  useEffect(() => {
+    setSignMode(appMode === 'conversation');
+  }, [appMode]);
+
+  // Handle conversational word detection for sentence building & TTS
+  useEffect(() => {
+    if (appMode === 'conversation' && telemetry.gesture && telemetry.gesture !== 'NONE') {
+      const word = telemetry.gesture;
+      if (lastSpokenWordRef.current !== word) {
+        lastSpokenWordRef.current = word;
+        // Append to sentence
+        setSentenceWords(prev => [...prev, word]);
+        // Add to transcript
+        setConversationHistory(prev => [
+          { word, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) },
+          ...prev.slice(0, 19)
+        ]);
+
+        // Speak word naturally if sound enabled
+        if (soundEnabled && 'speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(word.toLowerCase().replace('_', ' '));
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          window.speechSynthesis.speak(utterance);
+        }
+      }
+    }
+  }, [telemetry.gesture, appMode, soundEnabled]);
+
+  const speakCurrentSentence = () => {
+    if (sentenceWords.length > 0 && 'speechSynthesis' in window) {
+      const text = sentenceWords.map(w => w.toLowerCase().replace('_', ' ')).join(' ');
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const clearSentence = () => {
+    setSentenceWords([]);
+    lastSpokenWordRef.current = null;
+  };
 
   // WebSocket Connection with exponential backoff
   useEffect(() => {
@@ -262,24 +307,31 @@ export default function App() {
         </div>
 
         <div className="header-controls">
+          {/* Mode Switcher Tabs */}
+          <div className="app-mode-switcher">
+            <button 
+              className={`mode-tab-btn ${appMode === 'emergency' ? 'active-tab-emergency' : ''}`}
+              onClick={() => setAppMode('emergency')}
+            >
+              <AlertTriangle size={15} />
+              Emergency Mode
+            </button>
+            <button 
+              className={`mode-tab-btn ${appMode === 'conversation' ? 'active-tab-conversation' : ''}`}
+              onClick={() => setAppMode('conversation')}
+            >
+              <MessageSquare size={15} />
+              Conversational Mode
+            </button>
+          </div>
+
           <button 
             className="control-btn active-purple"
             onClick={() => setShowGlossary(true)}
             title="Open Sign Language Dictionary"
           >
             <BookOpen size={16} />
-            Glossary ({NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length} Signs)
-          </button>
-
-          {/* Explicit Normal Sign Language ON/OFF Toggle */}
-          <button 
-            className={`control-btn ${signMode ? 'active-green' : 'active-orange'}`}
-            onClick={() => setSignMode(!signMode)}
-            title="Turn Normal Conversational Sign Language ON or OFF"
-            id="toggle-normal-signs"
-          >
-            <Sparkles size={16} />
-            <span>Normal Signs: <strong>{signMode ? 'ON' : 'OFF'}</strong></span>
+            Glossary ({NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length})
           </button>
 
           <button 
@@ -317,7 +369,7 @@ export default function App() {
                 <Video size={48} opacity={0.4} />
                 <p className="font-semibold text-lg">Live AI Gesture & Sign Feed</p>
                 <p className="text-sm text-text-muted max-w-md text-center">
-                  Click <strong>Start Camera</strong> to stream your webcam directly through the MediaPipe AI gesture recognizer and distress model.
+                  Click <strong>Start Camera</strong> to stream your webcam directly through the MediaPipe AI {appMode === 'conversation' ? 'Conversational Sign Translator' : 'Emergency Detector'}.
                 </p>
                 <button className="primary-action-btn" onClick={startBrowserCamera}>
                   <Video size={18} /> Enable Camera Now
@@ -326,144 +378,218 @@ export default function App() {
             )}
             {frame && (
               <div className="camera-overlay-stats">
-                FPS: {telemetry.fps > 0 ? telemetry.fps.toFixed(1) : '20.0'} | Mode: {signMode ? 'Normal + Emergency' : 'Emergency Only'}
+                FPS: {telemetry.fps > 0 ? telemetry.fps.toFixed(1) : '20.0'} | Mode: {appMode === 'conversation' ? 'Conversational Translation' : 'Emergency Monitor'}
               </div>
             )}
           </div>
         </div>
 
-        {/* Telemetry Stat Cards */}
-        <div className="telemetry-grid">
-          <div className="glass-panel stat-card">
-            <div className="stat-title"><Activity size={18} className="text-accent-blue" /> Recognized Sign / Gesture</div>
-            <div className={`stat-value ${telemetry.gesture !== 'NONE' && telemetry.gesture !== 'No gesture' ? 'high-threat' : ''}`}>
-              {telemetry.gesture || 'NONE'}
-            </div>
-            <div className="text-sm text-text-muted mt-1">
-              Confidence: {(telemetry.confidence * 100).toFixed(0)}%
-            </div>
-          </div>
-          
-          <div className="glass-panel stat-card">
-            <div className="stat-title"><AlertTriangle size={18} className="text-accent-orange" /> Threat Assessment</div>
-            <div className={`stat-value ${getThreatColor(telemetry.threat_level)}`}>
-              {telemetry.threat_level || 'NONE'}
-            </div>
-            <div className="progress-bg">
-              <div 
-                className="progress-fill" 
-                style={{ 
-                  width: `${Math.min(100, Math.max(8, telemetry.distress_score * 100))}%`,
-                  backgroundColor: getThreatHex(telemetry.threat_level)
-                }} 
-              />
-            </div>
-          </div>
+        {/* Dynamic Mode-Specific Content */}
+        {appMode === 'conversation' ? (
+          /* ============================================================ */
+          /* CONVERSATIONAL SIGN MODE VIEW                                */
+          /* ============================================================ */
+          <div className="flex flex-col gap-4">
+            {/* Live Sentence Builder & Real-time Translation */}
+            <div className="glass-panel p-4 sentence-builder-panel">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-accent-purple" />
+                  <span className="font-semibold">Live Sign-to-Speech Sentence Translator</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    className="action-pill-btn btn-speak"
+                    onClick={speakCurrentSentence}
+                    disabled={sentenceWords.length === 0}
+                    title="Speak whole sentence aloud"
+                  >
+                    <Volume2 size={14} /> Speak Sentence
+                  </button>
+                  <button 
+                    className="action-pill-btn btn-clear"
+                    onClick={clearSentence}
+                    disabled={sentenceWords.length === 0}
+                    title="Clear sentence"
+                  >
+                    <Trash2 size={14} /> Clear
+                  </button>
+                </div>
+              </div>
 
-          <div className="glass-panel stat-card">
-            <div className="stat-title"><Cpu size={18} className="text-accent-green" /> Facial Distress & Emotion</div>
-            <div className="stat-value" style={{ textTransform: 'capitalize' }}>
-              {telemetry.dominant_emotion || 'neutral'}
+              <div className="sentence-display-box">
+                {sentenceWords.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {sentenceWords.map((w, idx) => (
+                      <span key={idx} className="sentence-word-pill">
+                        {w}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-text-muted italic text-sm">
+                    Perform conversational sign gestures in front of the camera (or click signs below) to form a sentence...
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="text-sm text-text-muted mt-1">
-              Distress Score: {(telemetry.distress_score * 100).toFixed(0)}%
-            </div>
-          </div>
-        </div>
 
-        {/* Normal Sign Language Quick Simulator & ON/OFF Controls */}
-        <div className={`glass-panel trigger-panel ${!signMode ? 'panel-disabled' : ''}`}>
-          <div className="trigger-header">
-            <div className="flex items-center gap-2">
-              <MessageSquare size={18} className="text-accent-purple" />
-              <span className="font-semibold">Normal Conversational Sign Language</span>
-              <span className={`mode-pill ${signMode ? 'pill-on' : 'pill-off'}`}>
-                {signMode ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}
-              </span>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <button 
-                className={`toggle-switch-btn ${signMode ? 'btn-active-on' : 'btn-active-off'}`}
-                onClick={() => setSignMode(!signMode)}
-                title="Click to turn Normal Sign Language ON or OFF"
-              >
-                {signMode ? 'Turn OFF Normal Signs' : 'Turn ON Normal Signs'}
-              </button>
+            {/* Conversational Telemetry Cards */}
+            <div className="telemetry-grid">
+              <div className="glass-panel stat-card">
+                <div className="stat-title"><Activity size={18} className="text-accent-purple" /> Translated Sign Word</div>
+                <div className="stat-value text-accent-purple">
+                  {telemetry.gesture !== 'NONE' ? telemetry.gesture : 'Listening...'}
+                </div>
+                <div className="text-sm text-text-muted mt-1">
+                  Confidence: {(telemetry.confidence * 100).toFixed(0)}%
+                </div>
+              </div>
 
-              <button className="text-xs text-accent-blue underline cursor-pointer bg-transparent border-none" onClick={() => setShowGlossary(true)}>
-                View All {NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length} Signs →
-              </button>
-            </div>
-          </div>
+              <div className="glass-panel stat-card">
+                <div className="stat-title"><MessageSquare size={18} className="text-accent-blue" /> Mode Status</div>
+                <div className="stat-value text-accent-green">
+                  Conversational Active
+                </div>
+                <div className="text-sm text-text-muted mt-1">
+                  Emergency Alarms: <strong>Silenced</strong>
+                </div>
+              </div>
 
-          {!signMode ? (
-            <div className="disabled-banner">
-              <span>⚠️ Normal Sign Language is currently <strong>TURNED OFF</strong>. The AI is filtering for <strong>Emergency Signals Only</strong>.</span>
-              <button className="turn-on-btn" onClick={() => setSignMode(true)}>
-                ⚡ Click to Turn Normal Sign Language ON
-              </button>
+              <div className="glass-panel stat-card">
+                <div className="stat-title"><Cpu size={18} className="text-accent-green" /> Facial State</div>
+                <div className="stat-value" style={{ textTransform: 'capitalize' }}>
+                  {telemetry.dominant_emotion || 'neutral'}
+                </div>
+                <div className="text-sm text-text-muted mt-1">
+                  Emotion: {telemetry.dominant_emotion || 'neutral'}
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="normal-signs-grid">
-              {NORMAL_SIGNS.map((sign) => (
-                <button 
-                  key={sign.word}
-                  className={`normal-sign-btn ${sign.word === 'NO' ? 'btn-no-highlight' : ''} ${lastTriggered === sign.word ? 'triggered' : ''}`}
-                  onClick={() => triggerTestAlert(sign.word, 'Low')}
-                  title={sign.gesture}
-                >
-                  <span className="sign-word">{sign.word}</span>
-                  <span className="sign-meaning">{sign.meaning}</span>
+
+            {/* All Conversational Signs Interactive Pad */}
+            <div className="glass-panel trigger-panel">
+              <div className="trigger-header">
+                <div className="flex items-center gap-2">
+                  <MessageSquare size={18} className="text-accent-purple" />
+                  <span className="font-semibold">Conversational Sign Language Quick Pad</span>
+                  <span className="mode-pill pill-on">19 Conversational Signs</span>
+                </div>
+                <button className="text-xs text-accent-blue underline cursor-pointer bg-transparent border-none" onClick={() => setShowGlossary(true)}>
+                  View 3D Geometries & Meaning →
                 </button>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
 
-        {/* Emergency Simulator */}
-        <div className="glass-panel trigger-panel">
-          <div className="trigger-header">
-            <div className="flex items-center gap-2">
-              <Radio size={18} className="text-accent-blue animate-pulse" />
-              <span className="font-semibold">Critical Emergency Signals</span>
+              <div className="normal-signs-grid">
+                {NORMAL_SIGNS.map((sign) => (
+                  <button 
+                    key={sign.word}
+                    className={`normal-sign-btn ${sign.word === 'NO' ? 'btn-no-highlight' : ''} ${lastTriggered === sign.word ? 'triggered' : ''}`}
+                    onClick={() => triggerTestAlert(sign.word, 'Low')}
+                    title={sign.gesture}
+                  >
+                    <span className="sign-word">{sign.word}</span>
+                    <span className="sign-meaning">{sign.meaning}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <span className="text-xs text-text-muted">High priority alerts with instant audio dispatch</span>
           </div>
+        ) : (
+          /* ============================================================ */
+          /* EMERGENCY RESPONSE MODE VIEW                                 */
+          /* ============================================================ */
+          <div className="flex flex-col gap-4">
+            {/* Telemetry Stat Cards */}
+            <div className="telemetry-grid">
+              <div className="glass-panel stat-card">
+                <div className="stat-title"><Activity size={18} className="text-accent-blue" /> Emergency Gesture</div>
+                <div className={`stat-value ${telemetry.gesture !== 'NONE' && telemetry.gesture !== 'No gesture' ? 'high-threat' : ''}`}>
+                  {telemetry.gesture || 'NONE'}
+                </div>
+                <div className="text-sm text-text-muted mt-1">
+                  Confidence: {(telemetry.confidence * 100).toFixed(0)}%
+                </div>
+              </div>
+              
+              <div className="glass-panel stat-card">
+                <div className="stat-title"><AlertTriangle size={18} className="text-accent-orange" /> Threat Assessment</div>
+                <div className={`stat-value ${getThreatColor(telemetry.threat_level)}`}>
+                  {telemetry.threat_level || 'NONE'}
+                </div>
+                <div className="progress-bg">
+                  <div 
+                    className="progress-fill" 
+                    style={{ 
+                      width: `${Math.min(100, Math.max(8, telemetry.distress_score * 100))}%`,
+                      backgroundColor: getThreatHex(telemetry.threat_level)
+                    }} 
+                  />
+                </div>
+              </div>
 
-          <div className="trigger-buttons-grid">
-            <button 
-              className={`trigger-btn btn-sos ${lastTriggered === 'HELP' ? 'triggered' : ''}`}
-              onClick={() => triggerTestAlert('HELP', 'Critical')}
-            >
-              <Siren size={18} /> SOS / HELP
-            </button>
-            <button 
-              className={`trigger-btn btn-medical ${lastTriggered === 'MEDICAL' ? 'triggered' : ''}`}
-              onClick={() => triggerTestAlert('MEDICAL', 'Critical')}
-            >
-              <Ambulance size={18} /> MEDICAL
-            </button>
-            <button 
-              className={`trigger-btn btn-fire ${lastTriggered === 'FIRE' ? 'triggered' : ''}`}
-              onClick={() => triggerTestAlert('FIRE', 'High')}
-            >
-              <Flame size={18} /> FIRE
-            </button>
-            <button 
-              className={`trigger-btn btn-police ${lastTriggered === 'POLICE' ? 'triggered' : ''}`}
-              onClick={() => triggerTestAlert('POLICE', 'High')}
-            >
-              <Shield size={18} /> POLICE
-            </button>
-            <button 
-              className={`trigger-btn btn-safe ${lastTriggered === 'SAFE' ? 'triggered' : ''}`}
-              onClick={() => triggerTestAlert('SAFE', 'Low')}
-            >
-              <CheckCircle2 size={18} /> ALL CLEAR
-            </button>
+              <div className="glass-panel stat-card">
+                <div className="stat-title"><Cpu size={18} className="text-accent-green" /> Facial Distress Score</div>
+                <div className="stat-value" style={{ textTransform: 'capitalize' }}>
+                  {telemetry.dominant_emotion || 'neutral'}
+                </div>
+                <div className="text-sm text-text-muted mt-1">
+                  Distress: {(telemetry.distress_score * 100).toFixed(0)}%
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Signals Simulator */}
+            <div className="glass-panel trigger-panel">
+              <div className="trigger-header">
+                <div className="flex items-center gap-2">
+                  <Radio size={18} className="text-accent-red animate-pulse" />
+                  <span className="font-semibold">Critical Emergency Signals (Siren Dispatch)</span>
+                  <span className="mode-pill pill-off">Emergency Mode Active</span>
+                </div>
+                <span className="text-xs text-text-muted">High priority alerts with instant audio siren dispatch</span>
+              </div>
+
+              <div className="trigger-buttons-grid">
+                <button 
+                  className={`trigger-btn btn-sos ${lastTriggered === 'SOS' ? 'triggered' : ''}`}
+                  onClick={() => triggerTestAlert('SOS', 'Critical')}
+                >
+                  <ShieldAlert size={20} />
+                  <span>SOS / HELP</span>
+                </button>
+                <button 
+                  className={`trigger-btn btn-medical ${lastTriggered === 'MEDICAL' ? 'triggered' : ''}`}
+                  onClick={() => triggerTestAlert('MEDICAL', 'Critical')}
+                >
+                  <Activity size={20} />
+                  <span>MEDICAL</span>
+                </button>
+                <button 
+                  className={`trigger-btn btn-fire ${lastTriggered === 'FIRE' ? 'triggered' : ''}`}
+                  onClick={() => triggerTestAlert('FIRE', 'High')}
+                >
+                  <Flame size={20} />
+                  <span>FIRE ALARM</span>
+                </button>
+                <button 
+                  className={`trigger-btn btn-police ${lastTriggered === 'POLICE' ? 'triggered' : ''}`}
+                  onClick={() => triggerTestAlert('POLICE', 'High')}
+                >
+                  <Radio size={20} />
+                  <span>POLICE ASSIST</span>
+                </button>
+                <button 
+                  className={`trigger-btn btn-safe ${lastTriggered === 'SAFE' ? 'triggered' : ''}`}
+                  onClick={() => triggerTestAlert('SAFE', 'Low')}
+                >
+                  <CheckCircle2 size={20} />
+                  <span>ALL CLEAR</span>
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
       {/* Sidebar Alerts Panel */}
