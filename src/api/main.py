@@ -213,9 +213,24 @@ async def system_stats() -> StatsResponse:
     return StatsResponse(**snapshot)
 
 @app.post("/api/v1/trigger", tags=["Alerts"])
-async def manual_trigger(gesture: str = "HELP", threat_level: str = "Critical") -> dict[str, Any]:
-    """Manually dispatch a test alert for demonstration."""
+async def manual_trigger(
+    gesture: str = "HELP", 
+    threat_level: str = "Critical",
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    label: Optional[str] = None
+) -> dict[str, Any]:
+    """Manually dispatch a test alert with optional real GPS location."""
     from src.services.alert_dispatcher import dispatch as dispatch_alert
+    loc_payload = None
+    if lat is not None and lon is not None:
+        loc_payload = {
+            "latitude": lat,
+            "longitude": lon,
+            "label": label or f"{lat:.4f}° N, {lon:.4f}° E (Current GPS)",
+            "source": "browser_gps"
+        }
+
     payload = dispatch_alert(
         gesture_label=gesture,
         gesture_confidence=0.95,
@@ -224,6 +239,7 @@ async def manual_trigger(gesture: str = "HELP", threat_level: str = "Critical") 
         severity_score=0.92,
         threat_level=threat_level,
         distress_flag=True,
+        location=loc_payload,
         enable_tts=True,
         force=True,
     )
@@ -237,7 +253,7 @@ async def manual_trigger(gesture: str = "HELP", threat_level: str = "Critical") 
 
 @app.websocket("/api/v1/stream")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for live telemetry and camera frames."""
+    """WebSocket endpoint for live telemetry and camera frames with real location support."""
     import json
     import numpy as np
 
@@ -258,7 +274,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                         if frame is not None:
                             sign_mode = bool(data.get("sign_mode", False))
-                            overlay_rgb, snapshot = runtime.process_frame(frame, use_sign_mode=sign_mode, is_flipped=True)
+                            location = data.get("location")
+                            overlay_rgb, snapshot = runtime.process_frame(
+                                frame, 
+                                use_sign_mode=sign_mode, 
+                                is_flipped=True,
+                                user_location=location
+                            )
                             bgr_overlay = cv2.cvtColor(overlay_rgb, cv2.COLOR_RGB2BGR)
                             ret, buffer = cv2.imencode('.jpg', bgr_overlay, [cv2.IMWRITE_JPEG_QUALITY, 60])
                             if ret:

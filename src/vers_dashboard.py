@@ -212,7 +212,13 @@ class DashboardRuntime:
         self._last_tick = time.perf_counter()
         self._pipeline_initialized = True
 
-    def process_frame(self, frame: np.ndarray, use_sign_mode: bool | None = None, is_flipped: bool = False) -> tuple[np.ndarray, dict[str, Any]]:
+    def process_frame(
+        self, 
+        frame: np.ndarray, 
+        use_sign_mode: bool | None = None, 
+        is_flipped: bool = False,
+        user_location: dict[str, Any] | None = None
+    ) -> tuple[np.ndarray, dict[str, Any]]:
         """Process a single video frame through the full multimodal AI pipeline."""
         self.ensure_model_loaded()
         self._init_ai_pipeline()
@@ -329,10 +335,10 @@ class DashboardRuntime:
 
         distress_flag = smart_result.urgency_score > distress_threshold
 
-        # --- 5. ALERT DISPATCH (Emergency Mode Only) ---
+        # --- 5. ALERT DISPATCH (Emergency Mode Only - Fast Dispatch) ---
         payload = None
-        if not use_sign_mode and smart_result.gesture_label != "NONE" and smart_result.gesture_confidence >= 0.5:
-            if smart_result.context_mode == "EMERGENCY" or smart_result.urgency_score > 0.4:
+        if not use_sign_mode and smart_result.gesture_label != "NONE" and smart_result.gesture_confidence >= 0.45:
+            if smart_result.context_mode == "EMERGENCY" or smart_result.urgency_score > 0.35:
                 payload = dispatch_alert(
                     gesture_label=smart_result.gesture_label,
                     gesture_confidence=smart_result.gesture_confidence,
@@ -341,6 +347,7 @@ class DashboardRuntime:
                     severity_score=fusion_score,
                     threat_level=fused_sev_label,
                     distress_flag=distress_flag,
+                    location=user_location,
                     enable_tts=True,
                 )
                 if payload is not None:

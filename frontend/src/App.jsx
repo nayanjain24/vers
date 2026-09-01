@@ -94,6 +94,50 @@ export default function App() {
   const [conversationHistory, setConversationHistory] = useState([]);
   const lastSpokenWordRef = useRef(null);
 
+  // Real GPS Current Location Tracking
+  const [userLocation, setUserLocation] = useState(null);
+  const userLocationRef = useRef(null);
+
+  useEffect(() => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            label: `GPS: ${pos.coords.latitude.toFixed(4)}° N, ${pos.coords.longitude.toFixed(4)}° E (Live Device Location)`,
+            source: 'browser_gps'
+          };
+          setUserLocation(loc);
+          userLocationRef.current = loc;
+        },
+        (err) => {
+          console.warn("Geolocation warning:", err.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+
+      const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const loc = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            label: `GPS: ${pos.coords.latitude.toFixed(4)}° N, ${pos.coords.longitude.toFixed(4)}° E (Live Device Location)`,
+            source: 'browser_gps'
+          };
+          setUserLocation(loc);
+          userLocationRef.current = loc;
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 30000 }
+      );
+
+      return () => navigator.geolocation.clearWatch(watchId);
+    }
+  }, []);
+
   // Sync refs with state
   useEffect(() => {
     appModeRef.current = appMode;
@@ -238,6 +282,7 @@ export default function App() {
           ws.current.send(JSON.stringify({
             image: dataUrl,
             sign_mode: appModeRef.current === 'conversation',
+            location: userLocationRef.current,
           }));
         }
       }, 33);
@@ -268,7 +313,11 @@ export default function App() {
       setLastTriggered(gesture);
       setTimeout(() => setLastTriggered(null), 1500);
       const host = window.location.hostname || 'localhost';
-      const res = await fetch(`http://${host}:8000/api/v1/trigger?gesture=${gesture}&threat_level=${threatLevel}`, {
+      let url = `http://${host}:8000/api/v1/trigger?gesture=${gesture}&threat_level=${threatLevel}`;
+      if (userLocationRef.current && userLocationRef.current.latitude) {
+        url += `&lat=${userLocationRef.current.latitude}&lon=${userLocationRef.current.longitude}&label=${encodeURIComponent(userLocationRef.current.label || '')}`;
+      }
+      const res = await fetch(url, {
         method: 'POST'
       });
       const data = await res.json();
@@ -303,7 +352,23 @@ export default function App() {
     if (!loc) return null;
     if (typeof loc === 'string') return loc;
     if (typeof loc === 'object') {
-      return loc.label || (loc.latitude ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : JSON.stringify(loc));
+      if (loc.latitude && loc.longitude) {
+        return (
+          <span className="flex items-center gap-1 flex-wrap">
+            <span>{loc.label || `GPS: ${loc.latitude.toFixed(4)}°, ${loc.longitude.toFixed(4)}°`}</span>
+            <a 
+              href={`https://maps.google.com/?q=${loc.latitude},${loc.longitude}`}
+              target="_blank" 
+              rel="noreferrer" 
+              className="text-accent-blue underline text-xs"
+              style={{ marginLeft: '4px' }}
+            >
+              (Open Maps ↗)
+            </a>
+          </span>
+        );
+      }
+      return loc.label || JSON.stringify(loc);
     }
     return String(loc);
   };
@@ -582,9 +647,22 @@ export default function App() {
       <aside className="sidebar">
         <div className="glass-panel alerts-panel">
           <div className="alerts-header">
-            <Shield size={20} className="text-accent-blue" />
-            <span>Live Dispatch Log</span>
-            <span className="alert-badge">{alerts.length}</span>
+            <div className="flex items-center gap-2">
+              <Shield size={20} className="text-accent-blue" />
+              <span>Live Dispatch Log</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {userLocation ? (
+                <span className="text-xs text-accent-green" style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '0.2rem 0.5rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.3)' }} title={userLocation.label}>
+                  📍 GPS Active
+                </span>
+              ) : (
+                <span className="text-xs text-text-muted" style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '0.2rem 0.5rem', borderRadius: '12px' }}>
+                  📍 Acquiring GPS...
+                </span>
+              )}
+              <span className="alert-badge">{alerts.length}</span>
+            </div>
           </div>
 
           <div className="alerts-list">
@@ -610,7 +688,11 @@ export default function App() {
                       <span>Threat: <strong>{alert.ThreatLevel || alert.Severity || 'Critical'}</strong></span>
                       <span>Score: {((alert.SeverityScore || 0.9) * 100).toFixed(0)}%</span>
                     </div>
-                    {alert.Location && <div className="text-xs text-text-muted">📍 {formatLocation(alert.Location)}</div>}
+                    {alert.Location && (
+                      <div className="text-xs text-text-muted mt-1" style={{ background: 'rgba(0, 0, 0, 0.25)', padding: '0.4rem 0.6rem', borderRadius: '6px' }}>
+                        {formatLocation(alert.Location)}
+                      </div>
+                    )}
                     {alert.Message && <div className="text-xs text-text-muted italic">{alert.Message}</div>}
                   </div>
                 </div>

@@ -64,11 +64,11 @@ def _simulated_location() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Cooldown state
+# Cooldown state & Tuning
 # ---------------------------------------------------------------------------
 _last_signature: str = ""
 _last_alert_time: float = 0.0
-ALERT_COOLDOWN_SECONDS: float = 5.0
+ALERT_COOLDOWN_SECONDS: float = 1.5
 
 
 # ---------------------------------------------------------------------------
@@ -139,9 +139,11 @@ def build_alert_payload(
     severity_score: float,
     threat_level: str,
     distress_flag: bool,
+    location: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Construct a fully structured JSON alert payload."""
-    location = _simulated_location()
+    """Construct a fully structured JSON alert payload with real or fallback location."""
+    if location is None:
+        location = _simulated_location()
 
     severity_map = {
         "CRITICAL": "Critical",
@@ -209,8 +211,8 @@ def build_alert_payload(
 
 _last_alert_by_gesture: dict[str, float] = {}
 _global_last_alert_time: float = 0.0
-GLOBAL_ALERT_COOLDOWN_SECONDS: float = 3.0
-SAME_GESTURE_COOLDOWN_SECONDS: float = 6.0
+GLOBAL_ALERT_COOLDOWN_SECONDS: float = 1.0
+SAME_GESTURE_COOLDOWN_SECONDS: float = 2.0
 
 
 def dispatch(
@@ -222,6 +224,7 @@ def dispatch(
     threat_level: str,
     distress_flag: bool,
     *,
+    location: dict[str, Any] | None = None,
     enable_tts: bool = True,
     force: bool = False,
 ) -> Optional[dict[str, Any]]:
@@ -248,6 +251,7 @@ def dispatch(
         severity_score=severity_score,
         threat_level=threat_level,
         distress_flag=distress_flag,
+        location=location,
     )
 
     _last_alert_by_gesture[gesture_label] = now
