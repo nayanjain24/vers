@@ -159,55 +159,63 @@ def draw_overlay(
 
     
     # Text and layout constants
-    # Text and layout constants
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.6
+    font_scale = 0.75
     thickness = 2
-    x_offset = 20
-    y_start = 32
-    line_height = 28
+    x_offset = 15
+    y_start = 40
+    line_height = 35
 
-    def draw_text_with_bg(img, text, pos, color, bg_color=(0, 0, 0), alpha=0.65):
+    def draw_text_with_bg(img, text, pos, color, bg_color=(0, 0, 0), alpha=0.6):
         (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
         tx, ty = pos
-        # Clamp bounds
-        h, w = img.shape[:2]
-        r_y1 = max(0, ty - th - 6)
-        r_y2 = min(h, ty + baseline + 6)
-        r_x1 = max(0, tx - 8)
-        r_x2 = min(w, tx + tw + 8)
-
-        sub_img = img[r_y1:r_y2, r_x1:r_x2]
+        # Draw background rect
+        rect_start = (tx - 5, ty - th - 5)
+        rect_end = (tx + tw + 5, ty + baseline + 5)
+        sub_img = img[rect_start[1]:rect_end[1], rect_start[0]:rect_end[0]]
         if sub_img.size > 0:
             black_rect = np.zeros(sub_img.shape, dtype=np.uint8)
             res = cv2.addWeighted(sub_img, 1 - alpha, black_rect, alpha, 0)
-            img[r_y1:r_y2, r_x1:r_x2] = res
-        cv2.putText(img, text, (tx, ty), font, font_scale, color, thickness, cv2.LINE_AA)
+            img[rect_start[1]:rect_end[1], rect_start[0]:rect_end[0]] = res
+        cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
 
     # 1. Gesture Line
     if is_none:
-        g_text = "Gesture: None"
-        g_color = (220, 220, 220)
+        g_text = "Gesture: None detected"
+        g_color = (200, 200, 200)
     elif is_accepted:
         severity = ALERT_MAP.get(str(display_label).upper(), ALERT_MAP["NONE"]).get("severity", "Low")
-        g_text = f"Gesture: {display_label} ({int(display_confidence * 100)}%)"
+        g_text = f"Gesture: {display_label} (MATCH)"
         g_color = (0, 255, 0) if severity == "Low" else (0, 165, 255) if severity == "Medium" else (0, 0, 255)
     else:
-        g_text = f"Gesture: {display_label} ({int(display_confidence * 100)}%)"
-        g_color = (0, 255, 255)
+        g_text = f"Gesture: {display_label} (LOW CONFIDENCE)"
+        g_color = (0, 255, 255) # Yellow/Orange
 
     draw_text_with_bg(overlay, g_text, (x_offset, y_start), g_color)
 
-    # 2. Distress Line (if high or distress detected)
-    if distress_flag:
-        draw_text_with_bg(overlay, f"Distress: {distress_score:.2f} (HIGH)", 
-                          (x_offset, y_start + line_height), (0, 0, 255))
-    elif sign_word and sign_word != "NONE":
-        draw_text_with_bg(overlay, f"Sign: {sign_word}", 
-                          (x_offset, y_start + line_height), (0, 255, 255))
+    # 2. Confidence Line
+    # c_color = (0, 255, 0) if is_accepted else (0, 255, 255) if not is_none else (200, 200, 200)
+    # draw_text_with_bg(overlay, f"Confidence: {display_confidence:.2f}", (x_offset, y_start + line_height), c_color)
 
-    # 3. System status (Bottom Left)
-    draw_text_with_bg(overlay, f"VERS v{VERS_VERSION}", (x_offset, frame.shape[0] - 16), (200, 200, 200), alpha=0.4)
+    # 3. Distress Line
+    d_color = (0, 0, 255) if distress_flag else (0, 255, 0)
+    draw_text_with_bg(overlay, f"Distress: {distress_score:.3f} {'(HIGH)' if distress_flag else '(NORMAL)'}", 
+                      (x_offset, y_start + (line_height * 2)), d_color)
+
+    # 4. FPS counter
+    if fps > 0:
+        draw_text_with_bg(overlay, f"FPS: {fps:.1f}", (x_offset, y_start + (line_height * 3)), (255, 255, 255))
+
+    # 5. Smart Context & Sign Word
+    ctx_mode = getattr(smart_result, "context_mode", "IDLE")
+    ctx_color = (255, 255, 0) if ctx_mode == "CONVERSATION" else (0, 0, 255) if ctx_mode == "EMERGENCY" else (200, 200, 200)
+    draw_text_with_bg(overlay, f"Mode: {ctx_mode}", (x_offset, y_start + (line_height * 4)), ctx_color)
+    
+    if sign_word and sign_word != "NONE":
+        draw_text_with_bg(overlay, f"Sign: {sign_word}", (x_offset, y_start + (line_height * 5)), (0, 255, 255))
+
+    # 6. System status (Bottom Left)
+    draw_text_with_bg(overlay, f"VERS v{VERS_VERSION} | System Active", (x_offset, frame.shape[0] - 20), (220, 220, 220), alpha=0.4)
 
     if getattr(hand_results, "multi_hand_landmarks", None):
         for hand_lms in hand_results.multi_hand_landmarks:

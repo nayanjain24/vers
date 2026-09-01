@@ -22,6 +22,11 @@
   box-sizing: border-box;
 }
 
+img, video, canvas {
+  max-width: 100%;
+  display: block;
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-dark);
@@ -33,14 +38,18 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 /* Utility helpers */
 .flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
 .gap-2 { gap: 0.5rem; }
 .gap-3 { gap: 0.75rem; }
+.gap-4 { gap: 1rem; }
 .text-xs { font-size: 0.75rem; }
 .text-sm { font-size: 0.875rem; }
 .text-lg { font-size: 1.125rem; }
@@ -48,6 +57,7 @@ body {
 .font-medium { font-weight: 500; }
 .font-semibold { font-weight: 600; }
 .mt-1 { margin-top: 0.25rem; }
+.mb-2 { margin-bottom: 0.5rem; }
 .max-w-md { max-width: 28rem; }
 .underline { text-decoration: underline; }
 .cursor-pointer { cursor: pointer; }
@@ -82,14 +92,15 @@ body {
 
 /* Dashboard Layout */
 .dashboard-container {
-  max-width: 1440px;
+  max-width: 1400px;
   width: 100%;
   margin: 0 auto;
-  padding: 1rem 1.5rem;
+  padding: 1rem 1.25rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1rem;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* Header */
@@ -418,14 +429,11 @@ body {
 }
 
 /* Camera Feed */
-/* Camera Feed */
 .camera-container {
   position: relative;
   width: 100%;
-  max-width: 680px;
-  max-height: 360px;
-  aspect-ratio: 16/9;
-  margin: 0 auto;
+  height: 320px;
+  max-height: 340px;
   border-radius: 12px;
   overflow: hidden;
   background: #000;
@@ -437,7 +445,9 @@ body {
 .camera-feed {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
 }
 
 .camera-placeholder {
@@ -513,12 +523,8 @@ body {
 }
 
 .stat-value {
-  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  font-size: 1.35rem;
   font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
 
 .stat-value.high-threat { color: var(--accent-red); }
@@ -588,23 +594,16 @@ body {
 .normal-sign-btn .sign-word {
   font-weight: 700;
   font-size: 0.8rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  text-align: center;
 }
 
 .normal-sign-btn .sign-meaning {
   font-size: 0.65rem;
   color: var(--text-muted);
   text-align: center;
-  white-space: normal;
-  line-height: 1.2;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .trigger-buttons-grid {
@@ -626,7 +625,6 @@ body {
   gap: 0.35rem;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
 }
 
 .trigger-btn:hover {
