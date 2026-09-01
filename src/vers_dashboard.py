@@ -228,29 +228,26 @@ class DashboardRuntime:
         self._frame_counter += 1
         frame_counter = self._frame_counter
 
-        # --- 1. HAND GESTURE TRACKING ---
+        # --- 1. HAND GESTURE TRACKING (Dual-Tier: Emergency Primary, Conversational Secondary) ---
         hand_results = self._hands.process(rgb)
         hand_vector = extract_hand_vector(hand_results)
 
         raw_label, raw_conf = "NONE", 0.0
+        primary_em_label, secondary_conv_label = "NONE", "NONE"
         if hand_vector is not None:
-            raw_label, raw_conf = predict_gesture(hand_vector, use_sign_mode=use_sign_mode)
+            from src.vision.gesture_tracker import predict_dual_tier_sign
+            dual_result = predict_dual_tier_sign(hand_vector)
+            primary_em_label = dual_result["primary_emergency"]
+            secondary_conv_label = dual_result["secondary_conversational"]
+
             if use_sign_mode:
-                SIGN_WHITELIST = {
-                    "HELLO", "THANK_YOU", "PLEASE", "YES", "NO", "WATER", "FOOD", "WANT", 
-                    "MORE", "FRIEND", "FAMILY", "NAME", "GOOD", "BAD", "SORRY", "UNDERSTAND", 
-                    "PHONE", "WHERE", "FINISHED", "HELP", "STOP", "ACCIDENT", "MEDICAL", 
-                    "FIRE", "POLICE", "AMBULANCE", "DANGER", "PAIN", "FALL", "SAFE", "EMERGENCY"
-                }
-                if raw_label not in SIGN_WHITELIST:
-                    raw_label, raw_conf = "NONE", 0.0
+                # If conversational mode is ON: evaluate both, giving emergency precedence
+                raw_label = dual_result["active_label"]
+                raw_conf = dual_result["active_conf"]
             else:
-                EMERGENCY_WHITELIST = {
-                    "HELP", "SOS", "MEDICAL", "FIRE", "POLICE", "AMBULANCE",
-                    "ACCIDENT", "DANGER", "PAIN", "FALL", "STOP", "SAFE", "EMERGENCY"
-                }
-                if raw_label not in EMERGENCY_WHITELIST:
-                    raw_label, raw_conf = "NONE", 0.0
+                # If strict emergency mode is ON: only pass emergency signs
+                raw_label = dual_result["primary_emergency"]
+                raw_conf = dual_result["emergency_conf"]
 
             self._sign_buffer.push(hand_vector)
 

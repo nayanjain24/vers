@@ -311,7 +311,10 @@ def _ai_soft_classify(flat_vector: np.ndarray, top_k: int = 3) -> list[tuple[str
 # ---------------------------------------------------------------------------
 
 def predict_gesture(hand_vector: Any, use_sign_mode: bool = False) -> tuple[str, float]:
-    """Classify a hand gesture using hybrid physics + ML + centroid AI approach."""
+    """Classify a hand gesture using hybrid physics + ML + centroid AI approach.
+    
+    Emergency signs serve as PRIMARY (high priority) and conversational signs as SECONDARY.
+    """
     if hasattr(hand_vector, "to_numpy"):
         vec = hand_vector.to_numpy(dtype=np.float32).flatten()
     else:
@@ -357,6 +360,54 @@ def predict_gesture(hand_vector: Any, use_sign_mode: bool = False) -> tuple[str,
         return res_label, res_conf
 
     return "NONE", 0.0
+
+
+def predict_dual_tier_sign(hand_vector: Any) -> dict[str, Any]:
+    """Predict both Primary (Emergency) and Secondary (Conversational) signs simultaneously.
+    
+    Returns:
+      {
+        "primary_emergency": str,
+        "emergency_conf": float,
+        "secondary_conversational": str,
+        "conversational_conf": float,
+        "active_label": str,
+        "active_conf": float,
+        "is_emergency_priority": bool
+      }
+    """
+    em_label, em_conf = predict_gesture(hand_vector, use_sign_mode=False)
+    conv_label, conv_conf = predict_gesture(hand_vector, use_sign_mode=True)
+    
+    EMERGENCY_SET = {
+        "SOS", "HELP", "MEDICAL", "FIRE", "POLICE", "AMBULANCE",
+        "ACCIDENT", "DANGER", "PAIN", "FALL", "STOP", "SAFE", "EMERGENCY"
+    }
+    
+    # Emergency signs take primary precedence if detected
+    if em_label in EMERGENCY_SET and em_conf >= 0.55:
+        active_label = em_label
+        active_conf = em_conf
+        is_em = True
+    elif conv_label != "NONE" and conv_conf >= 0.50:
+        active_label = conv_label
+        active_conf = conv_conf
+        is_em = False
+    else:
+        active_label = em_label if em_label != "NONE" else "NONE"
+        active_conf = em_conf
+        is_em = em_label in EMERGENCY_SET
+
+    return {
+        "primary_emergency": em_label,
+        "emergency_conf": em_conf,
+        "secondary_conversational": conv_label,
+        "conversational_conf": conv_conf,
+        "active_label": active_label,
+        "active_conf": active_conf,
+        "is_emergency_priority": is_em,
+    }
+
 
 
 def predict_gesture_top_k(hand_vector: Any, k: int = 3) -> list[tuple[str, float]]:
