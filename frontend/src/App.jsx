@@ -89,34 +89,28 @@ export default function App() {
   const streamRef = useRef(null);
   const sendIntervalRef = useRef(null);
   const [appMode, setAppMode] = useState('emergency'); // 'emergency' | 'conversation'
+  const appModeRef = useRef(appMode);
   const [sentenceWords, setSentenceWords] = useState([]);
   const [conversationHistory, setConversationHistory] = useState([]);
   const lastSpokenWordRef = useRef(null);
 
-  // Sync signMode with appMode
+  // Sync refs with state
   useEffect(() => {
+    appModeRef.current = appMode;
     setSignMode(appMode === 'conversation');
   }, [appMode]);
 
-  // Handle conversational word detection for sentence building & TTS
+  // Handle conversational word detection for TTS
   useEffect(() => {
     if (appMode === 'conversation' && telemetry.gesture && telemetry.gesture !== 'NONE') {
       const word = telemetry.gesture;
       if (lastSpokenWordRef.current !== word) {
         lastSpokenWordRef.current = word;
-        // Append to sentence
-        setSentenceWords(prev => [...prev, word]);
-        // Add to transcript
-        setConversationHistory(prev => [
-          { word, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) },
-          ...prev.slice(0, 19)
-        ]);
-
         // Speak word naturally if sound enabled
         if (soundEnabled && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(word.toLowerCase().replace('_', ' '));
           utterance.rate = 1.0;
-          utterance.pitch = 1.0;
           window.speechSynthesis.speak(utterance);
         }
       }
@@ -136,40 +130,59 @@ export default function App() {
     lastSpokenWordRef.current = null;
   };
 
-  // WebSocket Connection with exponential backoff
+  // WebSocket Connection with auto-reconnect
   useEffect(() => {
-    let reconnectDelay = 1000;
-    const MAX_RECONNECT_DELAY = 15000;
+    let reconnectTimeout = null;
+    let isUnmounted = false;
 
     const connectWs = () => {
-      ws.current = new WebSocket('ws://localhost:8000/api/v1/stream');
+      if (isUnmounted) return;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname || 'localhost';
+      const wsUrl = `${protocol}//${host}:8000/api/v1/stream`;
 
-      ws.current.onopen = () => {
-        setConnected(true);
-        reconnectDelay = 1000; // Reset on successful connection
-      };
+      try {
+        ws.current = new WebSocket(wsUrl);
 
-      ws.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.image) setFrame(data.image);
-          if (data.telemetry) setTelemetry(data.telemetry);
-          if (data.alerts) setAlerts(data.alerts);
-        } catch (e) {
-          console.error("Error parsing websocket message", e);
+        ws.current.onopen = () => {
+          if (!isUnmounted) setConnected(true);
+        };
+
+        ws.current.onmessage = (event) => {
+          if (isUnmounted) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.image) setFrame(data.image);
+            if (data.telemetry) setTelemetry(data.telemetry);
+            if (data.alerts) setAlerts(data.alerts);
+          } catch (e) {
+            console.error("Error parsing websocket message", e);
+          }
+        };
+
+        ws.current.onerror = () => {
+          if (!isUnmounted) setConnected(false);
+        };
+
+        ws.current.onclose = () => {
+          if (!isUnmounted) {
+            setConnected(false);
+            reconnectTimeout = setTimeout(connectWs, 2000);
+          }
+        };
+      } catch (err) {
+        if (!isUnmounted) {
+          setConnected(false);
+          reconnectTimeout = setTimeout(connectWs, 2000);
         }
-      };
-
-      ws.current.onclose = () => {
-        setConnected(false);
-        setTimeout(connectWs, reconnectDelay);
-        reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT_DELAY);
-      };
+      }
     };
 
     connectWs();
 
     return () => {
+      isUnmounted = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (sendIntervalRef.current) {
         clearInterval(sendIntervalRef.current);
         sendIntervalRef.current = null;
@@ -184,7 +197,7 @@ export default function App() {
   const startBrowserCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 960 }, height: { ideal: 540 }, facingMode: 'user' },
+        video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: 'user' },
         audio: false
       });
       streamRef.current = stream;
@@ -209,7 +222,7 @@ export default function App() {
           const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
           ws.current.send(JSON.stringify({
             image: dataUrl,
-            sign_mode: signModeRef.current,
+            sign_mode: appModeRef.current === 'conversation',
           }));
         }
       }, 65);
@@ -239,7 +252,8 @@ export default function App() {
     try {
       setLastTriggered(gesture);
       setTimeout(() => setLastTriggered(null), 1500);
-      const res = await fetch(`http://localhost:8000/api/v1/trigger?gesture=${gesture}&threat_level=${threatLevel}`, {
+      const host = window.location.hostname || 'localhost';
+      const res = await fetch(`http://${host}:8000/api/v1/trigger?gesture=${gesture}&threat_level=${threatLevel}`, {
         method: 'POST'
       });
       const data = await res.json();
