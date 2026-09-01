@@ -246,7 +246,8 @@ class DashboardRuntime:
                     raw_label, raw_conf = "NONE", 0.0
             else:
                 EMERGENCY_WHITELIST = {
-                    "HELP", "MEDICAL", "EMERGENCY", "SAFE", "ACCIDENT", "POLICE", "DANGER", "SOS"
+                    "HELP", "SOS", "MEDICAL", "FIRE", "POLICE", "AMBULANCE",
+                    "ACCIDENT", "DANGER", "PAIN", "FALL", "STOP", "SAFE", "EMERGENCY"
                 }
                 if raw_label not in EMERGENCY_WHITELIST:
                     raw_label, raw_conf = "NONE", 0.0

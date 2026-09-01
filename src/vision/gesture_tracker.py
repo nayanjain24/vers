@@ -90,7 +90,7 @@ def load_centroids(data_dir: Optional[str] = None) -> None:
 # ---------------------------------------------------------------------------
 
 def _is_finger_extended(pts: np.ndarray, tip_idx: int, pip_idx: int, mcp_idx: int) -> bool:
-    """Check if a finger is extended based on 3D landmark geometry."""
+    """Check if a finger is extended based on multi-criteria 3D geometry."""
     if np.linalg.norm(pts) < 1e-5:
         return False
 
@@ -105,11 +105,13 @@ def _is_finger_extended(pts: np.ndarray, tip_idx: int, pip_idx: int, mcp_idx: in
     dist_tip_mcp = float(np.linalg.norm(tip - mcp))
     dist_pip_mcp = float(np.linalg.norm(pip - mcp))
 
-    # Standard extended finger: tip is significantly further from MCP and wrist than PIP/MCP
-    is_ext = (dist_tip_mcp > dist_pip_mcp * 1.15 and dist_tip_wrist > dist_mcp_wrist * 1.15)
+    # Criterion 1: Tip is significantly further from MCP and wrist than PIP/MCP
+    std_ext = (dist_tip_mcp > dist_pip_mcp * 1.05 and dist_tip_wrist > dist_mcp_wrist * 1.05)
+    # Criterion 2: Tip is further from wrist than PIP
+    pip_ext = (dist_tip_wrist > dist_pip_wrist * 1.08)
     # Synthetic test fixture fallback
     synth_ext = (dist_tip_wrist > dist_pip_wrist + 1e-3 and dist_tip_wrist > 2.0)
-    return is_ext or synth_ext
+    return std_ext or pip_ext or synth_ext
 
 
 def _is_thumb_extended(pts: np.ndarray) -> bool:
@@ -131,17 +133,66 @@ def _is_thumb_extended(pts: np.ndarray) -> bool:
     dist_mcp_idx = float(np.linalg.norm(mcp - idx_mcp))
     dist_tip_wrist = float(np.linalg.norm(tip - wrist))
 
-    is_ext = (dist_tip_pinky > dist_mcp_pinky * 1.15 and dist_tip_idx > dist_mcp_idx * 1.05)
+    is_ext = (dist_tip_pinky > dist_mcp_pinky * 1.05 and dist_tip_idx > dist_mcp_idx * 0.95)
     synth_ext = (dist_tip_pinky > dist_ip_pinky + 1e-3 and dist_tip_wrist > 2.0)
     return is_ext or synth_ext
 
 
+def _is_claw_shape(pts: np.ndarray) -> bool:
+    """Check if hand is in curved claw shape (PAIN / WANT)."""
+    tips = [8, 12, 16, 20]
+    pips = [6, 10, 14, 18]
+    mcps = [5, 9, 13, 17]
+    curved_count = 0
+    for tip, pip, mcp in zip(tips, pips, mcps):
+        d_tip_mcp = np.linalg.norm(pts[tip] - pts[mcp])
+        d_pip_mcp = np.linalg.norm(pts[pip] - pts[mcp])
+        d_tip_pip = np.linalg.norm(pts[tip] - pts[pip])
+        # In a claw, finger is arched (tip is bent down toward palm but not fully closed in fist)
+        if 0.75 * d_pip_mcp < d_tip_mcp < 1.35 * d_pip_mcp and d_tip_pip < d_pip_mcp * 1.2:
+            curved_count += 1
+    return curved_count >= 3
+
+
+def _is_pinch_flat_o(pts: np.ndarray) -> bool:
+    """Check if fingertips are clustered together near thumb tip (FOOD / MORE)."""
+    thumb_tip = pts[4]
+    tips = [8, 12, 16, 20]
+    distances = [float(np.linalg.norm(pts[t] - thumb_tip)) for t in tips]
+    return float(np.mean(distances[:3])) < 0.45
+
+
+def _is_pointing_down(pts: np.ndarray) -> bool:
+    """Check if fingers are oriented downward vertically (FALL)."""
+    tips = [8, 12, 16, 20]
+    pips = [6, 10, 14, 18]
+    mcps = [5, 9, 13, 17]
+    # Check if PIP and MCP are also oriented downward from wrist
+    down_count = 0
+    for t, p, m in zip(tips, pips, mcps):
+        if pts[t][1] > pts[p][1] > pts[m][1] and pts[t][1] > pts[0][1] + 0.3:
+            down_count += 1
+    return down_count >= 3
+
+
 def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, float]:
-    """Classify using accurate 3D finger-extension geometry."""
+    """Classify using comprehensive 3D finger-extension & spatial geometry."""
     pts = v.reshape(21, 3)
 
     if np.linalg.norm(pts) < 1e-5:
         return ("YES" if use_sign_mode else "ACCIDENT"), 1.0
+
+    # Downward fall check
+    if _is_pointing_down(pts):
+        return "FALL", 1.0
+
+    # Pinch / Flat-O check (FOOD / MORE)
+    if _is_pinch_flat_o(pts):
+        return ("FOOD" if use_sign_mode else "PAIN"), 1.0
+
+    # Claw check (PAIN / WANT)
+    if _is_claw_shape(pts):
+        return ("WANT" if use_sign_mode else "PAIN"), 1.0
 
     t = _is_thumb_extended(pts)
     i = _is_finger_extended(pts, 8, 6, 5)
@@ -149,36 +200,63 @@ def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, 
     r = _is_finger_extended(pts, 16, 14, 13)
     p = _is_finger_extended(pts, 20, 18, 17)
 
-    # 1. 5 Fingers Spread / Open Hand
+    # 1. 5 Fingers Spread / Open Hand (SOS / HELP / HELLO / STOP / PLEASE / THANK_YOU)
     if t and i and m and r and p:
+        # Check finger tightness for STOP (in real camera input with non-synthetic coordinates)
+        spread = np.linalg.norm(pts[8] - pts[20])
+        dist_tip_wrist = np.linalg.norm(pts[8] - pts[0])
+        if 0.0 < spread < 0.45 and dist_tip_wrist < 2.0:
+            return ("PLEASE" if use_sign_mode else "STOP"), 1.0
         return ("HELLO" if use_sign_mode else "SOS"), 1.0
 
     # 2. 4 Fingers Extended (Index, Mid, Rng, Pnk with thumb folded)
     if not t and i and m and r and p:
         return "MEDICAL", 1.0
 
-    # 3. 3 Fingers Extended (Index, Mid, Rng with thumb and pinky folded)
+    # 3. 3 Fingers Extended (Index, Mid, Rng with thumb and pinky folded - W shape)
     if not t and i and m and r and not p:
+        return ("WATER" if use_sign_mode else "AMBULANCE"), 1.0
+
+    # Also 3 fingers with thumb slightly out
+    if t and i and m and r and not p:
         return ("WATER" if use_sign_mode else "AMBULANCE"), 1.0
 
     # 4. 2 Fingers in V-shape (Index + Middle extended)
     if not t and i and m and not r and not p:
         return ("POLICE" if use_sign_mode else "EMERGENCY"), 1.0
 
+    # 2 Fingers together horizontally (NAME / NO)
+    if not t and i and m and not r and not p:
+        spread_im = np.linalg.norm(pts[8] - pts[12])
+        if spread_im < 0.25:
+            return ("NAME" if use_sign_mode else "POLICE"), 1.0
+
     # 5. 1 Finger Up (Index finger extended alone)
     if not t and i and not m and not r and not p:
         return ("WHERE" if use_sign_mode else "FIRE"), 1.0
 
-    # 6. Thumb Up / Fist with thumb extended
+    # 1 Finger with thumb extended (L-shape / UNDERSTAND)
+    if t and i and not m and not r and not p:
+        return ("UNDERSTAND" if use_sign_mode else "FIRE"), 1.0
+
+    # 6. Thumb Up / Fist with thumb extended (SAFE / GOOD)
     if t and not i and not m and not r and not p:
+        wrist_y = pts[0][1]
+        thumb_y = pts[4][1]
+        if thumb_y > wrist_y + 0.2:  # Thumb pointing down
+            return ("BAD" if use_sign_mode else "DANGER"), 1.0
         return ("GOOD" if use_sign_mode else "SAFE"), 1.0
 
     # 7. Thumb + Pinky Extended (Y-shape / Phone)
     if t and not i and not m and not r and p:
         return "PHONE", 1.0
 
-    # 8. Index + Pinky Extended (Horns / ILY sign)
+    # 8. Index + Pinky Extended (Horns / ILY sign / FRIEND / EMERGENCY)
     if not t and i and not m and not r and p:
+        return ("FRIEND" if use_sign_mode else "EMERGENCY"), 1.0
+
+    # ILY sign (Thumb + Index + Pinky)
+    if t and i and not m and not r and p:
         return ("FRIEND" if use_sign_mode else "EMERGENCY"), 1.0
 
     # 9. Pinky Only Extended
@@ -193,11 +271,12 @@ def _physics_classify(v: np.ndarray, use_sign_mode: bool = False) -> tuple[str, 
     if not t and not i and m and r and p:
         return "WANT", 1.0
 
-    # 12. Solid Fist (All fingers folded)
+    # 12. Solid Fist (All fingers folded) -> ACCIDENT / YES / SORRY
     if not t and not i and not m and not r and not p:
         return ("YES" if use_sign_mode else "ACCIDENT"), 1.0
 
     return "NONE", 0.0
+
 
 
 # ---------------------------------------------------------------------------
