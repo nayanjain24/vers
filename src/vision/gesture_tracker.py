@@ -90,7 +90,7 @@ def load_centroids(data_dir: Optional[str] = None) -> None:
 # ---------------------------------------------------------------------------
 
 def _is_finger_extended(pts: np.ndarray, tip_idx: int, pip_idx: int, mcp_idx: int) -> bool:
-    """Check if a finger is extended based on dual 2D/3D multi-criteria geometry."""
+    """Check if a finger is extended based on multi-criteria 3D geometry."""
     if np.linalg.norm(pts) < 1e-5:
         return False
 
@@ -99,28 +99,19 @@ def _is_finger_extended(pts: np.ndarray, tip_idx: int, pip_idx: int, mcp_idx: in
     pip = pts[pip_idx]
     mcp = pts[mcp_idx]
 
-    # 3D distances
-    d3_tip_wrist = float(np.linalg.norm(tip - wrist))
-    d3_mcp_wrist = float(np.linalg.norm(mcp - wrist))
-    d3_pip_wrist = float(np.linalg.norm(pip - wrist))
-    d3_tip_mcp = float(np.linalg.norm(tip - mcp))
-    d3_pip_mcp = float(np.linalg.norm(pip - mcp))
+    dist_tip_wrist = float(np.linalg.norm(tip - wrist))
+    dist_mcp_wrist = float(np.linalg.norm(mcp - wrist))
+    dist_pip_wrist = float(np.linalg.norm(pip - wrist))
+    dist_tip_mcp = float(np.linalg.norm(tip - mcp))
+    dist_pip_mcp = float(np.linalg.norm(pip - mcp))
 
-    # 2D projection distances (handles noisy webcam z-estimates)
-    d2_tip_wrist = float(np.linalg.norm(tip[:2] - wrist[:2]))
-    d2_pip_wrist = float(np.linalg.norm(pip[:2] - wrist[:2]))
-    d2_mcp_wrist = float(np.linalg.norm(mcp[:2] - wrist[:2]))
-
-    # Criterion 1: 3D tip is farther than MCP and PIP
-    c1 = (d3_tip_mcp > d3_pip_mcp * 1.02 and d3_tip_wrist > d3_mcp_wrist * 1.02)
-    # Criterion 2: 2D projection tip is farther than PIP/MCP
-    c2 = (d2_tip_wrist > d2_pip_wrist * 1.04 and d2_tip_wrist > d2_mcp_wrist * 1.04)
-    # Criterion 3: Tip is significantly further from wrist in 3D
-    c3 = (d3_tip_wrist > d3_pip_wrist * 1.05)
+    # Criterion 1: Tip is significantly further from MCP and wrist than PIP/MCP
+    std_ext = (dist_tip_mcp > dist_pip_mcp * 1.05 and dist_tip_wrist > dist_mcp_wrist * 1.05)
+    # Criterion 2: Tip is further from wrist than PIP
+    pip_ext = (dist_tip_wrist > dist_pip_wrist * 1.08)
     # Synthetic test fixture fallback
-    synth_ext = (d3_tip_wrist > d3_pip_wrist + 1e-3 and d3_tip_wrist > 2.0)
-
-    return c1 or c2 or c3 or synth_ext
+    synth_ext = (dist_tip_wrist > dist_pip_wrist + 1e-3 and dist_tip_wrist > 2.0)
+    return std_ext or pip_ext or synth_ext
 
 
 def _is_thumb_extended(pts: np.ndarray) -> bool:
@@ -135,16 +126,15 @@ def _is_thumb_extended(pts: np.ndarray) -> bool:
     idx_mcp = pts[5]
     wrist = pts[0]
 
-    d_tip_pinky = float(np.linalg.norm(tip - pinky_mcp))
-    d_mcp_pinky = float(np.linalg.norm(mcp - pinky_mcp))
-    d_ip_pinky = float(np.linalg.norm(ip - pinky_mcp))
-    d_tip_idx = float(np.linalg.norm(tip - idx_mcp))
-    d_tip_wrist = float(np.linalg.norm(tip - wrist))
-    d_mcp_wrist = float(np.linalg.norm(mcp - wrist))
+    dist_tip_pinky = float(np.linalg.norm(tip - pinky_mcp))
+    dist_mcp_pinky = float(np.linalg.norm(mcp - pinky_mcp))
+    dist_ip_pinky = float(np.linalg.norm(ip - pinky_mcp))
+    dist_tip_idx = float(np.linalg.norm(tip - idx_mcp))
+    dist_mcp_idx = float(np.linalg.norm(mcp - idx_mcp))
+    dist_tip_wrist = float(np.linalg.norm(tip - wrist))
 
-    # Extended away from pinky or index MCP
-    is_ext = (d_tip_pinky > d_mcp_pinky * 1.02 or d_tip_idx > 0.45 or d_tip_wrist > d_mcp_wrist * 1.15)
-    synth_ext = (d_tip_pinky > d_ip_pinky + 1e-3 and d_tip_wrist > 2.0)
+    is_ext = (dist_tip_pinky > dist_mcp_pinky * 1.05 and dist_tip_idx > dist_mcp_idx * 0.95)
+    synth_ext = (dist_tip_pinky > dist_ip_pinky + 1e-3 and dist_tip_wrist > 2.0)
     return is_ext or synth_ext
 
 

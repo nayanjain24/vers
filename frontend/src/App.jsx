@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Shield, 
+  ShieldAlert,
   Activity, 
   Video, 
   VideoOff, 
@@ -15,13 +16,12 @@ import {
   Radio, 
   HelpCircle,
   Siren,
-  ShieldAlert,
-  Trash2,
   BookOpen,
   X,
   Search,
   MessageSquare,
-  Hand
+  Hand,
+  Trash2
 } from 'lucide-react';
 import './index.css';
 
@@ -71,21 +71,18 @@ export default function App() {
     distress_score: 0,
     dominant_emotion: 'neutral',
     threat_level: 'NONE',
+    sign_word: '',
+    sign_buffer_words: []
   });
   const [alerts, setAlerts] = useState([]);
-  const [browserCamActive, setBrowserCamActive] = useState(false);
-  const [signMode, setSignMode] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [signMode, setSignMode] = useState(false);
+  const [browserCamActive, setBrowserCamActive] = useState(false);
   const [lastTriggered, setLastTriggered] = useState(null);
   const [showGlossary, setShowGlossary] = useState(false);
   const [glossaryTab, setGlossaryTab] = useState('normal'); // 'normal' | 'emergency'
   const [searchQuery, setSearchQuery] = useState('');
-
-  const signModeRef = useRef(signMode);
-  useEffect(() => {
-    signModeRef.current = signMode;
-  }, [signMode]);
-
+  
   const ws = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
