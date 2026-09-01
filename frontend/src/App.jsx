@@ -15,6 +15,8 @@ import {
   Radio, 
   HelpCircle,
   Siren,
+  ShieldAlert,
+  Trash2,
   BookOpen,
   X,
   Search,
@@ -87,6 +89,8 @@ export default function App() {
   const ws = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const sendIntervalRef = useRef(null);
   const [appMode, setAppMode] = useState('emergency'); // 'emergency' | 'conversation'
   const [sentenceWords, setSentenceWords] = useState([]);
   const [conversationHistory, setConversationHistory] = useState([]);

@@ -218,7 +218,9 @@ def draw_overlay(
     draw_text_with_bg(overlay, f"VERS v{VERS_VERSION} | System Active", (x_offset, frame.shape[0] - 20), (220, 220, 220), alpha=0.4)
 
     if getattr(hand_results, "multi_hand_landmarks", None):
+        h, w, _ = overlay.shape
         for hand_lms in hand_results.multi_hand_landmarks:
+            # Draw standard skeleton connections
             mp_drawing.draw_landmarks(
                 overlay,
                 hand_lms,
@@ -226,15 +228,29 @@ def draw_overlay(
                 mp_styles.get_default_hand_landmarks_style(),
                 mp_styles.get_default_hand_connections_style(),
             )
+            # Draw prominent fingertip halos
+            for tip_id in [4, 8, 12, 16, 20]:
+                lm = hand_lms.landmark[tip_id]
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                cv2.circle(overlay, (cx, cy), 7, (0, 255, 255), -1, cv2.LINE_AA)
+                cv2.circle(overlay, (cx, cy), 9, (0, 165, 255), 2, cv2.LINE_AA)
+
+            # Draw hand bounding box & floating gesture tag
+            x_coords = [int(lm.x * w) for lm in hand_lms.landmark]
+            y_coords = [int(lm.y * h) for lm in hand_lms.landmark]
+            xmin, xmax = max(0, min(x_coords) - 15), min(w, max(x_coords) + 15)
+            ymin, ymax = max(0, min(y_coords) - 15), min(h, max(y_coords) + 15)
+            
+            box_color = (0, 255, 0) if is_accepted else (0, 200, 255)
+            cv2.rectangle(overlay, (xmin, ymin), (xmax, ymax), box_color, 2, cv2.LINE_AA)
+            
+            if display_label != "NONE":
+                badge_text = f" {display_label} ({display_confidence:.0%}) "
+                (bw, bh), _ = cv2.getTextSize(badge_text, font, 0.6, 2)
+                cv2.rectangle(overlay, (xmin, max(0, ymin - bh - 8)), (xmin + bw, ymin), box_color, -1)
+                cv2.putText(overlay, badge_text, (xmin, max(bh + 2, ymin - 4)), font, 0.6, (0, 0, 0), 2, cv2.LINE_AA)
 
     if face_lms is not None:
-        mp_drawing.draw_landmarks(
-            overlay,
-            face_lms,
-            mp_face.FACEMESH_TESSELATION,
-            landmark_drawing_spec=None,
-            connection_drawing_spec=mp_styles.get_default_face_mesh_tesselation_style(),
-        )
         mp_drawing.draw_landmarks(
             overlay,
             face_lms,

@@ -187,18 +187,18 @@ class DashboardRuntime:
         if hasattr(self, "_pipeline_initialized") and self._pipeline_initialized:
             return
         self._hands = mp.solutions.hands.Hands(
-            max_num_hands=1,
+            max_num_hands=2,
             model_complexity=0,
-            min_detection_confidence=0.55,
-            min_tracking_confidence=0.55,
+            min_detection_confidence=0.35,
+            min_tracking_confidence=0.35,
         )
         self._face_mesh = mp.solutions.face_mesh.FaceMesh(
             max_num_faces=1,
             refine_landmarks=False,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
+            min_detection_confidence=0.4,
+            min_tracking_confidence=0.4,
         )
-        self._smoother = TemporalSmoother(window_size=7, min_votes=3)
+        self._smoother = TemporalSmoother(window_size=5, min_votes=2)
         self._smart_detector = SmartDetector()
         self._sign_buffer = SequenceBuffer(window_size=30)
         self._sign_recognizer = SignLanguageRecognizer()
