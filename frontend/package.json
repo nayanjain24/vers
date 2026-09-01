@@ -1,7 +1,9 @@
 {
-  "name": "frontend",
+  "name": "vers-command-center",
   "private": true,
-  "version": "0.0.0",
+  "version": "5.0.0",
+  "description": "VERS v5.0 — Visual Emergency Response System & Multimodal Sign AI Command Center",
+  "homepage": "https://github.com/nayanjain24/vers",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1,9 +1,10 @@
-"""Streamlit dashboard: VERS v2.0 Multimodal AI Command Center.
+"""VERS v5.0 DashboardRuntime — Multimodal AI Vision Pipeline.
 
 Integrates:
   - Vision: MediaPipe hand tracking + DeepFace facial emotion recognition
   - Intelligence: Temporal sequence smoothing + Multimodal severity fusion
   - Services: Async TTS voice alerts + Simulated GPS alert dispatch
+  - Frontend: React Command Center via WebSocket (Streamlit removed)
 """
 
 from __future__ import annotations

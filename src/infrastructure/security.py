@@ -61,10 +61,14 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         "/api/v1/alerts/recent",
         "/api/v1/stats",
         "/api/v1/trigger",
+        "/api/v1/stream",
     }
 
+    EXEMPT_PREFIXES = ("/docs/", "/redoc/")
+
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in self.EXEMPT_PATHS:
+        path = request.url.path
+        if path in self.EXEMPT_PATHS or path.startswith(self.EXEMPT_PREFIXES):
             return await call_next(request)
 
         api_key = get_or_create_api_key()

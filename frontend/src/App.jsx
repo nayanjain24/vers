@@ -33,6 +33,7 @@ const NORMAL_SIGNS = [
   { word: "FOOD", meaning: "Requesting food or meal", gesture: "Flat-O handshape (fingertips touching thumb) tapping lips", category: "Needs" },
   { word: "WANT", meaning: "Expressing a want or need", gesture: "Both hands open clawed palms up, pulling inward", category: "Needs" },
   { word: "MORE", meaning: "Requesting additional item", gesture: "Both hands forming flat-O, tapping fingertips together", category: "Needs" },
+  { word: "PLEASE", meaning: "Polite request modifier", gesture: "Flat palm held against chest in circular motion", category: "Conversational" },
   { word: "FRIEND", meaning: "Referring to a friend or ally", gesture: "Index fingers hooked into each other and reversed", category: "Social" },
   { word: "FAMILY", meaning: "Referring to family or relatives", gesture: "F-handshapes touching at thumbs and circling outward", category: "Social" },
   { word: "NAME", meaning: "Asking for or giving name", gesture: "H-handshapes (index+middle) tapping across each other", category: "Social" },
@@ -42,6 +43,7 @@ const NORMAL_SIGNS = [
   { word: "UNDERSTAND", meaning: "Confirming comprehension", gesture: "Index finger flicking up like a lightbulb near forehead", category: "Conversational" },
   { word: "PHONE", meaning: "Requesting a call or mobile device", gesture: "Y-handshape (thumb and pinky out) held up to the ear", category: "Needs" },
   { word: "WHERE", meaning: "Location inquiry", gesture: "Index finger held upright wagging side-to-side", category: "Conversational" },
+  { word: "FINISHED", meaning: "Task completed or done", gesture: "Open hands flipped outward away from body", category: "Feedback" },
 ];
 
 const EMERGENCY_SIGNS_LIST = [
@@ -89,13 +91,17 @@ export default function App() {
   const streamRef = useRef(null);
   const sendIntervalRef = useRef(null);
 
-  // WebSocket Connection
+  // WebSocket Connection with exponential backoff
   useEffect(() => {
+    let reconnectDelay = 1000;
+    const MAX_RECONNECT_DELAY = 15000;
+
     const connectWs = () => {
       ws.current = new WebSocket('ws://localhost:8000/api/v1/stream');
 
       ws.current.onopen = () => {
         setConnected(true);
+        reconnectDelay = 1000; // Reset on successful connection
       };
 
       ws.current.onmessage = (event) => {
@@ -111,13 +117,18 @@ export default function App() {
 
       ws.current.onclose = () => {
         setConnected(false);
-        setTimeout(connectWs, 2000);
+        setTimeout(connectWs, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT_DELAY);
       };
     };
 
     connectWs();
 
     return () => {
+      if (sendIntervalRef.current) {
+        clearInterval(sendIntervalRef.current);
+        sendIntervalRef.current = null;
+      }
       if (ws.current) {
         ws.current.close();
       }
@@ -258,7 +269,7 @@ export default function App() {
             title="Open Sign Language Dictionary"
           >
             <BookOpen size={16} />
-            Sign Language Glossary (30+ Signs)
+            Sign Language Glossary ({NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length} Signs)
           </button>
 
           <button 
@@ -367,7 +378,7 @@ export default function App() {
               <span className="font-semibold">Normal Conversational Sign Language Quick Test</span>
             </div>
             <button className="text-xs text-accent-blue underline cursor-pointer bg-transparent border-none" onClick={() => setShowGlossary(true)}>
-              View All 30+ Signs & Geometries →
+              View All {NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length} Signs & Geometries →
             </button>
           </div>
 

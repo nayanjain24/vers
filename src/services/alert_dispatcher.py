@@ -189,7 +189,7 @@ def build_alert_payload(
 
     return {
         "Timestamp": datetime.now().isoformat() + "Z",
-        "SystemVersion": "VERS-3.0-Production",
+        "SystemVersion": "VERS-5.0-Production",
         "MainGesture": gesture_label,
         "GestureConfidence": round(gesture_confidence, 4),
         "DominantEmotion": dominant_emotion,
@@ -258,7 +258,8 @@ def dispatch(
     # --- Multi-channel notification (v3.0) ---
     # Skip emergency notifications for conversational (Info) gestures
     _INFO_GESTURES = {
-        "HELLO", "THANK_YOU", "WATER", "FOOD", "FAMILY", "FRIEND",
+        "HELLO", "THANK_YOU", "PLEASE", "YES", "NO",
+        "WATER", "FOOD", "FAMILY", "FRIEND",
         "WHERE", "WANT", "UNDERSTAND", "NAME", "SORRY", "GOOD",
         "BAD", "MORE", "FINISHED", "PHONE", "SAFE",
     }

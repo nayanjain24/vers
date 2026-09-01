@@ -52,7 +52,7 @@ class AlertPayload(BaseModel):
     """Standardised alert payload emitted by the multimodal fusion engine."""
 
     Timestamp: str
-    SystemVersion: str = "VERS-3.0-Production"
+    SystemVersion: str = "VERS-5.0-Production"
     MainGesture: str
     GestureConfidence: float = Field(..., ge=0.0, le=1.0)
     DominantEmotion: str = "neutral"
@@ -68,7 +68,7 @@ class AlertPayload(BaseModel):
         json_schema_extra = {
             "example": {
                 "Timestamp": "2026-04-18T23:00:00Z",
-                "SystemVersion": "VERS-3.0-Production",
+                "SystemVersion": "VERS-5.0-Production",
                 "MainGesture": "SOS",
                 "GestureConfidence": 1.0,
                 "DominantEmotion": "fear",
@@ -94,7 +94,7 @@ class AlertPayload(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "healthy"
-    version: str = "VERS-3.0-Production"
+    version: str = "VERS-5.0-Production"
     uptime_seconds: float = 0.0
     camera_available: bool = False
     models_loaded: bool = False

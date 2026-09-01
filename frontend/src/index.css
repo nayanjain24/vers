@@ -35,6 +35,36 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Utility helpers */
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.text-xs { font-size: 0.75rem; }
+.text-sm { font-size: 0.875rem; }
+.text-lg { font-size: 1.125rem; }
+.text-center { text-align: center; }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.mt-1 { margin-top: 0.25rem; }
+.max-w-md { max-width: 28rem; }
+.underline { text-decoration: underline; }
+.cursor-pointer { cursor: pointer; }
+.italic { font-style: italic; }
+.bg-transparent { background: transparent; }
+.border-none { border: none; }
+.animate-pulse { animation: pulse-anim 2s infinite; }
+
+.text-accent-blue { color: var(--accent-blue); }
+.text-accent-green { color: var(--accent-green); }
+.text-accent-red { color: var(--accent-red); }
+.text-accent-orange { color: var(--accent-orange); }
+.text-accent-purple { color: var(--accent-purple); }
+.text-text-muted { color: var(--text-muted); }
+
+.p-4 { padding: 1rem; }
+
 /* Glassmorphism Utility */
 .glass-panel {
   background: var(--bg-panel);
@@ -373,7 +403,8 @@ body {
   filter: brightness(1.2);
 }
 
-.trigger-btn.triggered {
+.trigger-btn.triggered,
+.normal-sign-btn.triggered {
   animation: flash-anim 0.5s ease;
 }
 
@@ -708,5 +739,38 @@ body {
   }
   .search-bar {
     width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 1rem;
+    gap: 1rem;
+  }
+  .header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .header-controls {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+  .normal-signs-grid, .trigger-buttons-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .modal-content {
+    max-height: 95vh;
+    border-radius: 12px;
+  }
+  .modal-backdrop {
+    padding: 0.5rem;
+  }
+  .glossary-grid {
+    grid-template-columns: 1fr;
+    padding: 1rem;
   }
 }

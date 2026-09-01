@@ -1,4 +1,4 @@
-"""VERS v3.0 Production FastAPI Backend.
+"""VERS v5.0 Production FastAPI Backend.
 
 Replaces the legacy Flask mock server with a fully production-ready API
 providing REST endpoints for alert ingestion, health monitoring, and
@@ -17,6 +17,7 @@ from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import asyncio
 import cv2
 import base64
@@ -42,6 +43,57 @@ logger = logging.getLogger("vers.api")
 # ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Lifespan (modern replacement for deprecated on_event)
+# ---------------------------------------------------------------------------
+runtime = get_runtime()
+
+async def broadcast_camera_feed():
+    """Polls DashboardRuntime and broadcasts over WebSocket."""
+    runtime.start(conf_threshold=0.6, distress_threshold=0.6)
+    try:
+        while True:
+            await asyncio.sleep(0.05)  # ~20 FPS
+            if not manager.active_connections:
+                continue
+
+            snapshot = runtime.snapshot()
+            if snapshot["frame"] is not None:
+                bgr_frame = cv2.cvtColor(snapshot["frame"], cv2.COLOR_RGB2BGR)
+                ret, buffer = cv2.imencode('.jpg', bgr_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ret:
+                    b64_img = base64.b64encode(buffer).decode('utf-8')
+
+                    payload = {
+                        "telemetry": {
+                            "fps": snapshot.get("fps", 0),
+                            "gesture": snapshot.get("gesture", "NONE"),
+                            "confidence": snapshot.get("confidence", 0),
+                            "distress_score": snapshot.get("distress_score", 0),
+                            "dominant_emotion": snapshot.get("dominant_emotion", "neutral"),
+                            "threat_level": snapshot.get("threat_level", "NONE"),
+                            "sign_word": snapshot.get("sign_word", ""),
+                            "sign_buffer_words": snapshot.get("sign_buffer_words", []),
+                        },
+                        "alerts": snapshot.get("alerts", []),
+                        "image": b64_img
+                    }
+                    await manager.broadcast_json(payload)
+    except Exception as e:
+        logger.error(f"Camera broadcast task failed: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Modern lifecycle manager — replaces deprecated on_event hooks."""
+    api_key = get_or_create_api_key()
+    logger.info("VERS API v5.0 started. Docs at http://localhost:8000/docs")
+    logger.info("API Key: %s", api_key)
+    asyncio.create_task(broadcast_camera_feed())
+    yield
+    runtime.stop()
+
+
 app = FastAPI(
     title="VERS Emergency Response API",
     description=(
@@ -49,12 +101,13 @@ app = FastAPI(
         "Receives multimodal alert payloads, tracks system health, and exposes "
         "real-time operational statistics."
     ),
-    version="3.0.0",
+    version="5.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-# --- CORS (allow Streamlit dashboard to call the API) ---
+# --- CORS (allow React dashboard to call the API) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -96,60 +149,6 @@ manager = ConnectionManager()
 
 
 # ---------------------------------------------------------------------------
-# Startup event
-# ---------------------------------------------------------------------------
-runtime = get_runtime()
-
-async def broadcast_camera_feed():
-    """Polls DashboardRuntime and broadcasts over WebSocket."""
-    # Start the runtime
-    runtime.start(conf_threshold=0.6, distress_threshold=0.6)
-    try:
-        while True:
-            await asyncio.sleep(0.05) # ~20 FPS
-            if not manager.active_connections:
-                continue
-                
-            snapshot = runtime.snapshot()
-            if snapshot["frame"] is not None:
-                # Convert RGB to BGR for OpenCV encoding
-                bgr_frame = cv2.cvtColor(snapshot["frame"], cv2.COLOR_RGB2BGR)
-                # Encode to JPEG
-                ret, buffer = cv2.imencode('.jpg', bgr_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-                if ret:
-                    b64_img = base64.b64encode(buffer).decode('utf-8')
-                    
-                    payload = {
-                        "telemetry": {
-                            "fps": snapshot.get("fps", 0),
-                            "gesture": snapshot.get("gesture", "NONE"),
-                            "confidence": snapshot.get("confidence", 0),
-                            "distress_score": snapshot.get("distress_score", 0),
-                            "dominant_emotion": snapshot.get("dominant_emotion", "neutral"),
-                            "threat_level": snapshot.get("threat_level", "NONE"),
-                            "sign_word": snapshot.get("sign_word", ""),
-                            "sign_buffer_words": snapshot.get("sign_buffer_words", []),
-                        },
-                        "alerts": snapshot.get("alerts", []),
-                        "image": b64_img
-                    }
-                    await manager.broadcast_json(payload)
-    except Exception as e:
-        logger.error(f"Camera broadcast task failed: {e}")
-
-@app.on_event("startup")
-async def startup() -> None:
-    api_key = get_or_create_api_key()
-    logger.info("VERS API v3.0 started. Docs at http://localhost:8000/docs")
-    logger.info("API Key: %s", api_key)
-    asyncio.create_task(broadcast_camera_feed())
-
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    runtime.stop()
-
-
-# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -159,7 +158,7 @@ async def health_check() -> HealthResponse:
     metrics = get_metrics()
     return HealthResponse(
         status="healthy",
-        version="VERS-3.0-Production",
+        version="VERS-5.0-Production",
         uptime_seconds=round(time.time() - _start_time, 1),
         camera_available=True,
         models_loaded=True,

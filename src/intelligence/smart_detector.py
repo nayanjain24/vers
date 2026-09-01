@@ -77,10 +77,12 @@ REPETITION_WINDOW_SEC = 5.0   # seconds to count gesture repetitions
 FRANTIC_VELOCITY_THRESHOLD = 0.15  # normalised velocity above this = frantic
 HOLD_THRESHOLD = 0.02         # max motion to count as "holding" a pose
 EMERGENCY_SIGNS = {
-    "POLICE", "DANGER", "HELP", "MEDICAL", "ACCIDENT",
+    "HELP", "MEDICAL", "FIRE", "POLICE", "AMBULANCE",
+    "ACCIDENT", "DANGER", "EMERGENCY", "FALL", "STOP", "SOS",
 }
 CONVERSATION_SIGNS = {
-    "HELLO", "WATER", "SAFE", "PHONE", "FOOD", "FRIEND", "GOOD", "BAD", "WANT", "EMERGENCY"
+    "HELLO", "THANK_YOU", "WATER", "FOOD", "PHONE",
+    "FRIEND", "FAMILY", "GOOD", "BAD", "WANT", "SAFE",
 }
 
 
