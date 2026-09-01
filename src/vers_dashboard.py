@@ -288,18 +288,22 @@ class DashboardRuntime:
             active_gesture = smooth_label
             active_confidence = smooth_conf
 
-        # --- 3. EMOTION ANALYSIS ---
-        face_lms = None
-        if frame_counter % 3 == 0:
+        # --- 3. EMOTION & FACE ANALYSIS (Every 4 frames for maximum FPS) ---
+        if not hasattr(self, "_cached_face_lms"):
+            self._cached_face_lms = None
+
+        if frame_counter % 4 == 0 or self._cached_face_lms is None:
             face_results = self._face_mesh.process(rgb)
-            face_lms = (
-                face_results.multi_face_landmarks[0]
-                if getattr(face_results, "multi_face_landmarks", None)
-                else None
-            )
+            if getattr(face_results, "multi_face_landmarks", None):
+                self._cached_face_lms = face_results.multi_face_landmarks[0]
+            else:
+                self._cached_face_lms = None
+
             emo_result = analyze_emotion(rgb)
             self._cached_emotion["dominant_emotion"] = emo_result["dominant_emotion"]
             self._cached_emotion["distress_contribution"] = emo_result["distress_contribution"]
+
+        face_lms = self._cached_face_lms
 
         # --- 4. SMART DETECTOR & FUSION ---
         raw_lms = None
@@ -343,10 +347,7 @@ class DashboardRuntime:
                     with self._lock:
                         self._append_alert(payload)
 
-        # --- 6. OVERLAY VISUALS ---
-        if face_lms is None:
-            fr = self._face_mesh.process(rgb)
-            face_lms = fr.multi_face_landmarks[0] if getattr(fr, "multi_face_landmarks", None) else None
+        # --- 6. OVERLAY VISUALS (Zero Lag) ---
 
         tick = time.perf_counter()
         fps = 1.0 / max(tick - self._last_tick, 1e-6)

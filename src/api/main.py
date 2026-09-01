@@ -260,7 +260,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             sign_mode = bool(data.get("sign_mode", False))
                             overlay_rgb, snapshot = runtime.process_frame(frame, use_sign_mode=sign_mode, is_flipped=True)
                             bgr_overlay = cv2.cvtColor(overlay_rgb, cv2.COLOR_RGB2BGR)
-                            ret, buffer = cv2.imencode('.jpg', bgr_overlay, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                            ret, buffer = cv2.imencode('.jpg', bgr_overlay, [cv2.IMWRITE_JPEG_QUALITY, 60])
                             if ret:
                                 b64_img = base64.b64encode(buffer).decode('utf-8')
                                 payload = {

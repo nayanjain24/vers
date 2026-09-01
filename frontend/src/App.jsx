@@ -150,6 +150,7 @@ export default function App() {
 
         ws.current.onmessage = (event) => {
           if (isUnmounted) return;
+          isProcessingRef.current = false;
           try {
             const data = JSON.parse(event.data);
             if (data.image) setFrame(data.image);
@@ -162,17 +163,20 @@ export default function App() {
 
         ws.current.onerror = () => {
           if (!isUnmounted) setConnected(false);
+          isProcessingRef.current = false;
         };
 
         ws.current.onclose = () => {
           if (!isUnmounted) {
             setConnected(false);
+            isProcessingRef.current = false;
             reconnectTimeout = setTimeout(connectWs, 2000);
           }
         };
       } catch (err) {
         if (!isUnmounted) {
           setConnected(false);
+          isProcessingRef.current = false;
           reconnectTimeout = setTimeout(connectWs, 2000);
         }
       }
@@ -193,11 +197,13 @@ export default function App() {
     };
   }, []);
 
-  // Direct Browser Webcam Management
+  const isProcessingRef = useRef(false);
+
+  // Direct Browser Webcam Management (Zero-Lag 30FPS Streaming)
   const startBrowserCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: 'user' },
+        video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 30 } },
         audio: false
       });
       streamRef.current = stream;
@@ -209,23 +215,32 @@ export default function App() {
 
       if (!canvasRef.current) {
         canvasRef.current = document.createElement('canvas');
-        canvasRef.current.width = 640;
-        canvasRef.current.height = 360;
+        canvasRef.current.width = 480;
+        canvasRef.current.height = 270;
       }
 
       if (sendIntervalRef.current) clearInterval(sendIntervalRef.current);
+      isProcessingRef.current = false;
+
       sendIntervalRef.current = setInterval(() => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN && videoRef.current && videoRef.current.readyState >= 2) {
+        if (
+          ws.current && 
+          ws.current.readyState === WebSocket.OPEN && 
+          videoRef.current && 
+          videoRef.current.readyState >= 2 &&
+          !isProcessingRef.current
+        ) {
+          isProcessingRef.current = true;
           const canvas = canvasRef.current;
-          const ctx = canvas.getContext('2d');
+          const ctx = canvas.getContext('2d', { alpha: false });
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
           ws.current.send(JSON.stringify({
             image: dataUrl,
             sign_mode: appModeRef.current === 'conversation',
           }));
         }
-      }, 65);
+      }, 33);
     } catch (err) {
       console.error("Could not access browser camera:", err);
       alert("Could not access camera: " + err.message + "\nPlease click allow on your browser's camera prompt.");
