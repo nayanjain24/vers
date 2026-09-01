@@ -33,7 +33,6 @@ const NORMAL_SIGNS = [
   { word: "FOOD", meaning: "Requesting food or meal", gesture: "Flat-O handshape (fingertips touching thumb) tapping lips", category: "Needs" },
   { word: "WANT", meaning: "Expressing a want or need", gesture: "Both hands open clawed palms up, pulling inward", category: "Needs" },
   { word: "MORE", meaning: "Requesting additional item", gesture: "Both hands forming flat-O, tapping fingertips together", category: "Needs" },
-  { word: "PLEASE", meaning: "Polite request modifier", gesture: "Flat palm held against chest in circular motion", category: "Conversational" },
   { word: "FRIEND", meaning: "Referring to a friend or ally", gesture: "Index fingers hooked into each other and reversed", category: "Social" },
   { word: "FAMILY", meaning: "Referring to family or relatives", gesture: "F-handshapes touching at thumbs and circling outward", category: "Social" },
   { word: "NAME", meaning: "Asking for or giving name", gesture: "H-handshapes (index+middle) tapping across each other", category: "Social" },
