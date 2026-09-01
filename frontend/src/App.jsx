@@ -21,7 +21,8 @@ import {
   Search,
   MessageSquare,
   Hand,
-  Trash2
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 import './index.css';
 
@@ -82,6 +83,7 @@ export default function App() {
   const [showGlossary, setShowGlossary] = useState(false);
   const [glossaryTab, setGlossaryTab] = useState('normal'); // 'normal' | 'emergency'
   const [searchQuery, setSearchQuery] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
   
   const ws = useRef(null);
   const videoRef = useRef(null);
@@ -172,6 +174,33 @@ export default function App() {
   const clearSentence = () => {
     setSentenceWords([]);
     lastSpokenWordRef.current = null;
+  };
+
+  // Full System Reset Handler
+  const handleSystemReset = async () => {
+    try {
+      setIsResetting(true);
+      const host = window.location.hostname || 'localhost';
+      await fetch(`http://${host}:8000/api/v1/reset`, { method: 'POST' });
+      setAlerts([]);
+      setTelemetry({
+        fps: 0,
+        gesture: 'NONE',
+        confidence: 0,
+        distress_score: 0,
+        dominant_emotion: 'neutral',
+        threat_level: 'NONE',
+        sign_word: '',
+        sign_buffer_words: []
+      });
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      setTimeout(() => setIsResetting(false), 800);
+    } catch (err) {
+      console.error("System reset failed:", err);
+      setIsResetting(false);
+    }
   };
 
   // WebSocket Connection with auto-reconnect
@@ -429,6 +458,17 @@ export default function App() {
             Glossary ({NORMAL_SIGNS.length + EMERGENCY_SIGNS_LIST.length})
           </button>
 
+          {/* Full System Reset Button */}
+          <button 
+            className={`control-btn ${isResetting ? 'active-orange' : ''}`}
+            onClick={handleSystemReset}
+            title="Reset Full System (Clear Alerts, Reset AI Buffers & Stop Sirens)"
+            id="btn-system-reset"
+          >
+            <RotateCcw size={15} className={isResetting ? 'animate-spin' : ''} />
+            <span>{isResetting ? 'Resetting...' : 'Reset'}</span>
+          </button>
+
           <button 
             className={`control-btn ${browserCamActive ? 'active-green' : ''}`}
             onClick={browserCamActive ? stopBrowserCamera : startBrowserCamera}
@@ -651,7 +691,17 @@ export default function App() {
               <Shield size={20} className="text-accent-blue" />
               <span>Live Dispatch Log</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {alerts.length > 0 && (
+                <button 
+                  className="control-btn"
+                  style={{ padding: '0.2rem 0.45rem', fontSize: '0.7rem' }}
+                  onClick={handleSystemReset}
+                  title="Clear dispatch log and reset system"
+                >
+                  <RotateCcw size={12} /> Clear
+                </button>
+              )}
               {userLocation ? (
                 <span className="text-xs text-accent-green" style={{ background: 'rgba(16, 185, 129, 0.15)', padding: '0.2rem 0.5rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.3)' }} title={userLocation.label}>
                   📍 GPS Active

@@ -212,6 +212,21 @@ async def system_stats() -> StatsResponse:
     snapshot = metrics.snapshot()
     return StatsResponse(**snapshot)
 
+
+@app.post("/api/v1/reset", tags=["System"])
+async def reset_system() -> dict[str, Any]:
+    """Full system reset: clears alert history, resets detector buffers, metrics, and TTS."""
+    _alert_store.clear()
+    runtime.clear_data()
+    metrics = get_metrics()
+    metrics.reset()
+    try:
+        from src.services import voice_tts
+        voice_tts.stop()
+    except Exception:
+        pass
+    return {"status": "reset_complete", "message": "VERS v5.0 system reset successfully."}
+
 @app.post("/api/v1/trigger", tags=["Alerts"])
 async def manual_trigger(
     gesture: str = "HELP", 

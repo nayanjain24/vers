@@ -55,6 +55,15 @@ class MetricsCollector:
     def uptime_seconds(self) -> float:
         return time.time() - self._start_time
 
+    def reset(self) -> None:
+        with self._data_lock:
+            self._start_time = time.time()
+            self._alert_count = 0
+            self._alerts_by_threat.clear()
+            self._fps_samples.clear()
+            self._last_gesture = "NONE"
+            self._last_emotion = "neutral"
+
     def snapshot(self) -> dict:
         with self._data_lock:
             avg_fps = sum(self._fps_samples) / len(self._fps_samples) if self._fps_samples else 0.0
