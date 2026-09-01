@@ -127,6 +127,8 @@ async def broadcast_camera_feed():
                             "distress_score": snapshot.get("distress_score", 0),
                             "dominant_emotion": snapshot.get("dominant_emotion", "neutral"),
                             "threat_level": snapshot.get("threat_level", "NONE"),
+                            "sign_word": snapshot.get("sign_word", ""),
+                            "sign_buffer_words": snapshot.get("sign_buffer_words", []),
                         },
                         "alerts": snapshot.get("alerts", []),
                         "image": b64_img
@@ -270,6 +272,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                         "distress_score": snapshot.get("distress_score", 0),
                                         "dominant_emotion": snapshot.get("dominant_emotion", "neutral"),
                                         "threat_level": snapshot.get("threat_level", "NONE"),
+                                        "sign_word": snapshot.get("sign_word", ""),
+                                        "sign_buffer_words": snapshot.get("sign_buffer_words", []),
                                     },
                                     "alerts": snapshot.get("alerts", []),
                                     "image": b64_img,

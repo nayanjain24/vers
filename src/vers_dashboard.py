@@ -245,7 +245,7 @@ class DashboardRuntime:
                     raw_label, raw_conf = "NONE", 0.0
             else:
                 EMERGENCY_WHITELIST = {
-                    "HELP", "MEDICAL", "EMERGENCY", "SAFE", "ACCIDENT", "POLICE", "DANGER"
+                    "HELP", "MEDICAL", "EMERGENCY", "SAFE", "ACCIDENT", "POLICE", "DANGER", "SOS"
                 }
                 if raw_label not in EMERGENCY_WHITELIST:
                     raw_label, raw_conf = "NONE", 0.0
@@ -255,7 +255,7 @@ class DashboardRuntime:
         self._smoother.push(raw_label, raw_conf)
         smooth_label, smooth_conf = self._smoother.smoothed()
 
-        # --- 2. SIGN LANGUAGE RECOGNITION (v4.0) ---
+        # --- 2. SIGN LANGUAGE RECOGNITION (v4.0 / v5.0) ---
         sign_word = "NONE"
         sign_conf = 0.0
         if use_sign_mode:
@@ -266,17 +266,17 @@ class DashboardRuntime:
                 "FIRE", "POLICE", "AMBULANCE", "DANGER", "PAIN", "FALL", "SAFE", "EMERGENCY"
             }
             if self._sign_recognizer.available and self._sign_buffer.ready:
-                sign_word, sign_conf = self._sign_recognizer.predict(self._sign_buffer.get_tensor())
-                if sign_word not in SIGN_WHITELIST:
-                    sign_word, sign_conf = "NONE", 0.0
+                lstm_word, lstm_conf = self._sign_recognizer.predict(self._sign_buffer.get_tensor())
+                if lstm_word in SIGN_WHITELIST and lstm_conf >= 0.55:
+                    sign_word, sign_conf = lstm_word, lstm_conf
 
-            if sign_word == "NONE" and smooth_label in SIGN_WHITELIST:
+            if sign_word == "NONE" and smooth_label in SIGN_WHITELIST and smooth_conf >= 0.4:
                 sign_word = smooth_label
                 sign_conf = smooth_conf
 
             if sign_word != "NONE":
                 intent = self._intent_mapper.push_word(sign_word)
-                if intent is not None:
+                if intent is not None and intent.is_emergency:
                     sl_payload = dispatch_alert(
                         gesture_label=intent.alert_type,
                         gesture_confidence=sign_conf,
@@ -290,6 +290,21 @@ class DashboardRuntime:
                     if sl_payload is not None:
                         with self._lock:
                             self._append_alert(sl_payload)
+
+        # Unify active gesture across modes
+        if use_sign_mode:
+            if sign_word != "NONE":
+                active_gesture = sign_word
+                active_confidence = sign_conf
+            elif smooth_label != "NONE":
+                active_gesture = smooth_label
+                active_confidence = smooth_conf
+            else:
+                active_gesture = "NONE"
+                active_confidence = 0.0
+        else:
+            active_gesture = smooth_label
+            active_confidence = smooth_conf
 
         # --- 3. EMOTION ANALYSIS ---
         face_lms = None
@@ -311,14 +326,14 @@ class DashboardRuntime:
 
         smart_result = self._smart_detector.update(
             landmarks=raw_lms,
-            gesture_label=smooth_label,
-            gesture_confidence=smooth_conf,
+            gesture_label=active_gesture,
+            gesture_confidence=active_confidence,
             distress_score=self._cached_emotion.get("distress_contribution", 0.0)
         )
 
-        base_sev = ALERT_MAP.get(smooth_label, ALERT_MAP["NONE"])["severity"]
+        base_sev = ALERT_MAP.get(active_gesture, ALERT_MAP["NONE"])["severity"]
         fused_sev_label, fusion_score = calculate_fused_severity(
-            confidence=smooth_conf,
+            confidence=active_confidence,
             distress_score=smart_result.urgency_score,
             base_severity=base_sev
         )
@@ -360,7 +375,7 @@ class DashboardRuntime:
             hand_results,
             face_lms,
             smart_result,
-            sign_word=sign_word if use_sign_mode else "",
+            sign_word=active_gesture if (use_sign_mode and active_gesture != "NONE") else "",
             fps=fps,
         )
         frame_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
@@ -371,8 +386,8 @@ class DashboardRuntime:
                 {
                     "running": True,
                     "camera_active": True,
-                    "gesture": smooth_label if smooth_label != "NONE" else "No gesture",
-                    "confidence": smooth_conf if smooth_label != "NONE" else 0.0,
+                    "gesture": active_gesture if active_gesture != "NONE" else "No gesture",
+                    "confidence": active_confidence if active_gesture != "NONE" else 0.0,
                     "distress_score": smart_result.urgency_score,
                     "distress_flag": distress_flag,
                     "dominant_emotion": self._cached_emotion.get("dominant_emotion", "neutral"),
@@ -384,7 +399,7 @@ class DashboardRuntime:
                     "error": None,
                     "labels": list(self._labels),
                     "last_alert": payload or self._status.get("last_alert"),
-                    "sign_word": sign_word if use_sign_mode else "",
+                    "sign_word": active_gesture if use_sign_mode else "",
                     "sign_buffer_words": self._intent_mapper.current_words if use_sign_mode else [],
                     "sign_available": self._sign_recognizer.available,
                 }

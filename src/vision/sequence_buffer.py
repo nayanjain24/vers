@@ -119,6 +119,10 @@ class SequenceBuffer:
         """Clear the buffer (e.g. when switching modes)."""
         self._buffer.clear()
 
+    def clear(self) -> None:
+        """Alias for reset()."""
+        self._buffer.clear()
+
     @property
     def fill_level(self) -> float:
         """Fraction of the buffer that is filled (0.0 – 1.0)."""

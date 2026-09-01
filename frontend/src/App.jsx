@@ -78,6 +78,11 @@ export default function App() {
   const [glossaryTab, setGlossaryTab] = useState('normal'); // 'normal' | 'emergency'
   const [searchQuery, setSearchQuery] = useState('');
 
+  const signModeRef = useRef(signMode);
+  useEffect(() => {
+    signModeRef.current = signMode;
+  }, [signMode]);
+
   const ws = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -148,7 +153,7 @@ export default function App() {
           const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
           ws.current.send(JSON.stringify({
             image: dataUrl,
-            sign_mode: signMode,
+            sign_mode: signModeRef.current,
           }));
         }
       }, 65);
